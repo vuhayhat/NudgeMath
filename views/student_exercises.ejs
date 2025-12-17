@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bài tập được giao</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/student">Trang Học Sinh</a>
+      <a href="/student/dashboard">Dashboard</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Bài tập của lớp</h1>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tiêu đề</th>
+            <th>Chế độ</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (rows || []).forEach(r => { %>
+            <tr>
+              <td><%= r.id %></td>
+              <td><%= r.title %></td>
+              <td><%= r.mode || 'thường' %></td>
+              <td>
+                <a class="btn btn-outline" href="/student/exercises/<%= r.id %>">Làm bài</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quản lý học sinh</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+    </nav>
+  </header>
+  <div class="container">
+  <div class="card">
+    <h1>Quản lý học sinh</h1>
+    <% if (createdUser && createdPass) { %>
+      <div class="alert alert-info">Tạo học sinh thành công. Username: <strong><%= createdUser %></strong>, Mật khẩu: <strong><%= createdPass %></strong></div>
+    <% } %>
+    <form class="form" method="POST" action="/admin/students">
+      <input class="input" type="text" name="name" placeholder="Họ tên" required />
+      <select class="input" name="class_id">
+        <option value="">Chọn lớp</option>
+        <% (classes || []).forEach(c => { %>
+          <option value="<%= c.id %>"><%= c.name %></option>
+        <% }) %>
+      </select>
+      <input class="input" type="text" name="password" placeholder="Mật khẩu (tùy chọn)" />
+      <button class="btn btn-primary" type="submit">Thêm học sinh</button>
+    </form>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Họ tên</th>
+          <th>Lớp</th>
+          <th>Username</th>
+          <th>Streak</th>
+          <th>Sao</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (students || []).forEach(s => { %>
+          <tr>
+            <td><%= s.name %></td>
+            <td><%= s.class_name || '-' %></td>
+            <td><%= s.username %></td>
+            <td><%= s.streak || 0 %></td>
+            <td><%= s.stars || 0 %></td>
+            <td>
+              <form class="inline" method="POST" action="/admin/students/<%= s.id %>/reset">
+                <input class="input" type="text" name="new_password" placeholder="Mật khẩu mới (tùy chọn)" />
+                <button class="btn btn-outline" type="submit">Reset mật khẩu</button>
+              </form>
+              <form class="inline" method="POST" action="/admin/students/<%= s.id %>/delete" onsubmit="return confirm('Xóa học sinh này?')">
+                <button class="btn btn-danger" type="submit">Xóa</button>
+              </form>
+              <% if (createdUser && createdPass && createdUser === s.username) { %>
+                <div class="alert alert-info" style="margin-top:8px">Mật khẩu hiện tại: <strong><%= createdPass %></strong></div>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p><a href="/admin">Quay lại Trang Quản Trị</a></p>
+  </div>
+  </div>
+</body>
+</html>

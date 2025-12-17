@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nộp bài</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+      <a href="/admin/exercises">Quản lý bài tập</a>
+    </nav>
+  </header>
+  <div class="container">
+  <div class="card">
+    <h1>Nộp bài: <%= exercise ? exercise.title : '' %></h1>
+    <% if (exercise && exercise.mode === 'ai') { %>
+      <div class="alert alert-info">Bài AI: hệ thống đã tự chấm theo đáp án đúng.</div>
+    <% } %>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Học sinh</th>
+          <th>Đáp án chọn</th>
+          <th>Kết quả</th>
+          <th>Giải thích</th>
+          <th>Ảnh</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (submissions || []).forEach(s => { %>
+          <tr>
+            <td><%= s.student_name %> (<%= s.username %>)</td>
+            <td><%= s.selected || '-' %></td>
+            <td><%= s.autograded ? (s.is_correct ? 'Đúng' : 'Sai') : 'Chưa chấm' %></td>
+            <td><pre><%= s.explanation || s.content || '' %></pre></td>
+            <td>
+              <% if (s.images && s.images.length) { %>
+                <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                  <% s.images.forEach(img => { %>
+                    <a href="/uploads/<%= img %>" target="_blank">
+                      <img src="/uploads/<%= img %>" alt="ảnh" style="width:100%;max-height:120px;object-fit:cover;border:1px solid var(--border);border-radius:6px" />
+                    </a>
+                  <% }) %>
+                </div>
+              <% } else { %>
+                <span class="muted">Không có ảnh</span>
+              <% } %>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="5">
+              <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div>
+                  <div class="muted" style="margin-bottom:6px">Điểm hiện tại: <strong><%= s.grade == null ? '-' : s.grade %></strong> · Nhận xét: <%= s.feedback || '-' %></div>
+                  <form method="POST" action="/admin/submissions/<%= s.id %>/grade">
+                    <input class="input" type="number" name="grade" placeholder="Điểm" />
+                    <textarea class="input" name="feedback" placeholder="Nhận xét"></textarea>
+                    <button class="btn btn-primary" type="submit">Lưu</button>
+                  </form>
+                </div>
+                <div>
+                  <div class="muted" style="margin-bottom:6px">Nudge: <%= s.nudge || '-' %> · Sticker: <%= s.sticker || '-' %> · Sao: <%= s.stars || 0 %></div>
+                  <form method="POST" action="/admin/submissions/<%= s.id %>/nudge">
+                    <input class="input" type="text" name="nudge" placeholder="Nudge" />
+                    <input class="input" type="text" name="sticker" placeholder="Sticker" />
+                    <input class="input" type="number" name="stars" placeholder="Sao" />
+                    <input class="input" type="number" name="streak_delta" placeholder="Streak +/-" />
+                    <button class="btn btn-secondary" type="submit">Gửi động viên</button>
+                  </form>
+                </div>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p><a href="/admin">Trang Quản Trị</a> · <a href="/admin/exercises">Quản lý bài tập</a></p>
+  </div>
+  </div>
+</body>
+</html>

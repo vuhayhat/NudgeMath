@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bài đã giao</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+      <a href="/admin/exercises">Quản lý bài tập</a>
+    </nav>
+  </header>
+  <div class="container">
+  <div class="card">
+    <h1>Bài đã giao</h1>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Lớp</th>
+          <th>Tiêu đề bài tập</th>
+          <th>Ngày giao</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (rows || []).forEach(r => { %>
+          <tr>
+            <td><%= r.id %></td>
+            <td><%= r.class_name %></td>
+            <td><%= r.title %></td>
+            <td><%= new Date(r.assigned_at).toLocaleString('vi-VN') %></td>
+            <td>
+              <form class="inline" method="POST" action="/admin/exercises/assigned/<%= r.id %>/delete" onsubmit="return confirm('Xóa bài đã giao này?')">
+                <button class="btn btn-danger" type="submit">Xóa</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p><a href="/admin">Trang Quản Trị</a> · <a href="/admin/exercises">Quản lý bài tập</a></p>
+  </div>
+  </div>
+</body>
+</html>

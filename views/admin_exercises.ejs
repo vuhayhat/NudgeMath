@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quản lý bài tập</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+    </nav>
+  </header>
+  <div class="container">
+  <div class="card">
+    <h1>Quản lý bài tập</h1>
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+      <a class="btn btn-primary" href="/admin/exercises/new/manual">Tạo bài thủ công</a>
+      <a class="btn btn-secondary" href="/admin/exercises/new/ai">Tạo bài bằng AI</a>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Tiêu đề</th>
+          <th>Chế độ</th>
+          <th>Giao cho lớp</th>
+          <th>Học sinh nộp</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (exercises || []).forEach(e => { %>
+          <tr>
+            <td><%= e.id %></td>
+            <td><%= e.title %></td>
+            <td><%= e.mode || 'thường' %></td>
+            <td>
+              <form class="inline" method="POST" action="/admin/exercises/<%= e.id %>/assign">
+                <select class="input" name="class_id">
+                  <% (classes || []).forEach(c => { %>
+                    <option value="<%= c.id %>"><%= c.name %></option>
+                  <% }) %>
+                </select>
+                <button class="btn btn-outline" type="submit">Giao</button>
+              </form>
+            </td>
+            <td>
+              <a href="/admin/exercises/<%= e.id %>/submissions">Xem nộp</a>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p><a href="/admin/exercises/assigned">Xem bài đã giao</a></p>
+    <p><a href="/admin">Quay lại Trang Quản Trị</a></p>
+  </div>
+  </div>
+</body>
+</html>

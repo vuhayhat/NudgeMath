@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tạo bài bằng AI</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+      <a href="/admin/exercises">Quản lý bài tập</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Tạo bài bằng AI</h1>
+      <form class="form" method="POST" action="/admin/exercises/new/ai">
+        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <select class="input" name="grade_level" required>
+            <option value="10">Lớp 10</option>
+            <option value="11">Lớp 11</option>
+            <option value="12">Lớp 12</option>
+          </select>
+          <select class="input" name="difficulty" required>
+            <option value="easy">Dễ</option>
+            <option value="medium">Trung bình</option>
+            <option value="hard">Khó</option>
+          </select>
+          <input class="input" type="text" name="topic" placeholder="Chủ đề (ví dụ: hàm số, tích phân)" required />
+        </div>
+        <select class="input" name="class_id">
+          <option value="">Gán cho lớp (tùy chọn)</option>
+          <% (classes || []).forEach(c => { %>
+            <option value="<%= c.id %>"><%= c.name %></option>
+          <% }) %>
+        </select>
+        <button class="btn btn-primary" type="submit">Tạo bài bằng AI</button>
+      </form>
+      <p class="muted">Hệ thống sẽ tạo câu hỏi, 4 đáp án, đáp án đúng và giải thích chi tiết.</p>
+    </div>
+  </div>
+</body>
+</html>

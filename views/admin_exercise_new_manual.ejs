@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tạo bài thủ công</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+      <a href="/admin/exercises">Quản lý bài tập</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Tạo bài thủ công</h1>
+      <form class="form" method="POST" action="/admin/exercises/new/manual">
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+          <select class="input" name="grade_level">
+            <option value="">Lớp (tùy chọn)</option>
+            <option value="10">Lớp 10</option>
+            <option value="11">Lớp 11</option>
+            <option value="12">Lớp 12</option>
+          </select>
+          <input class="input" type="text" name="topic" placeholder="Chủ đề (tùy chọn)" />
+        </div>
+        <textarea class="input" name="question" placeholder="Nội dung câu hỏi" required rows="4"></textarea>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+          <input class="input" type="text" name="opt_a" placeholder="Đáp án A" required />
+          <input class="input" type="text" name="opt_b" placeholder="Đáp án B" required />
+          <input class="input" type="text" name="opt_c" placeholder="Đáp án C" required />
+          <input class="input" type="text" name="opt_d" placeholder="Đáp án D" required />
+        </div>
+        <select class="input" name="answer" required>
+          <option value="">Chọn đáp án đúng</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+        </select>
+        <select class="input" name="class_id">
+          <option value="">Gán cho lớp (tùy chọn)</option>
+          <% (classes || []).forEach(c => { %>
+            <option value="<%= c.id %>"><%= c.name %></option>
+          <% }) %>
+        </select>
+        <button class="btn btn-primary" type="submit">Tạo bài</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

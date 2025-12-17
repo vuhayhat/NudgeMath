@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kết quả bài làm</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/student/exercises">Bài tập</a>
+      <a href="/student/dashboard">Dashboard</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Kết quả</h1>
+      <p>Bạn chọn: <strong><%= selected %></strong></p>
+      <% if (ex.mode === 'ai') { %>
+        <p>Kết quả: <strong><%= isCorrect ? 'Đúng' : 'Sai' %></strong></p>
+        <% if (explanation) { %>
+          <div class="alert alert-info"><pre><%= explanation %></pre></div>
+        <% } %>
+      <% } else { %>
+        <p>Đã gửi bài. Giáo viên sẽ đối chiếu và phản hồi.</p>
+      <% } %>
+      <% if (images && images.length) { %>
+        <p>Đã đính kèm <strong><%= images.length %></strong> ảnh lời giải.</p>
+        <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 8px;">
+          <% images.forEach(img => { %>
+            <a href="/uploads/<%= img %>" target="_blank">
+              <img src="/uploads/<%= img %>" alt="ảnh" style="width:100%;max-height:120px;object-fit:cover;border:1px solid var(--border);border-radius:6px" />
+            </a>
+          <% }) %>
+        </div>
+      <% } %>
+      <a class="btn btn-outline" href="/student/exercises">Quay lại danh sách</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tạo kế hoạch</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+      <a href="/admin/plans">Kế hoạch giao bài</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Tạo kế hoạch</h1>
+      <form class="form" method="POST" action="/admin/plans">
+        <select class="input" name="class_id" required>
+          <option value="">Chọn lớp</option>
+          <% (classes || []).forEach(c => { %>
+            <option value="<%= c.id %>"><%= c.name %></option>
+          <% }) %>
+        </select>
+        <input class="input" type="text" name="name" placeholder="Tên kế hoạch" required />
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+          <input class="input" type="date" name="start_at" />
+          <input class="input" type="date" name="end_at" />
+        </div>
+        <button class="btn btn-primary" type="submit">Tạo kế hoạch</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

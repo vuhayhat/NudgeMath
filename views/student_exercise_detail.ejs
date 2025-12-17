@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Làm bài</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/student/exercises">Bài tập</a>
+      <a href="/student/dashboard">Dashboard</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <% if (!ex) { %>
+        <h1>Không tìm thấy bài tập</h1>
+      <% } else { %>
+        <h1><%= ex.title %></h1>
+        <p><%= ex.question || ex.description || '' %></p>
+        <form class="form" method="POST" action="/student/exercises/<%= ex.id %>/submit" enctype="multipart/form-data">
+          <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+            <label class="radio"><input type="radio" name="selected" value="A" required /> A. <%= ex.opt_a %></label>
+            <label class="radio"><input type="radio" name="selected" value="B" /> B. <%= ex.opt_b %></label>
+            <label class="radio"><input type="radio" name="selected" value="C" /> C. <%= ex.opt_c %></label>
+            <label class="radio"><input type="radio" name="selected" value="D" /> D. <%= ex.opt_d %></label>
+          </div>
+          <textarea class="input" name="content" placeholder="Giải thích (tùy chọn)" rows="3"></textarea>
+          <div>
+            <label class="muted" for="images">Đính kèm ảnh lời giải (có thể chọn nhiều)</label>
+            <input class="input" id="images" type="file" name="images" accept="image/*" multiple />
+          </div>
+          <button class="btn btn-primary" type="submit">Gửi bài làm</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

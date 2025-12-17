@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kế hoạch giao bài</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Kế hoạch giao bài</h1>
+      <p><a class="btn btn-primary" href="/admin/plans/new">Tạo kế hoạch mới</a></p>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Lớp</th>
+            <th>Tên kế hoạch</th>
+            <th>Bắt đầu</th>
+            <th>Kết thúc</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (rows || []).forEach(r => { %>
+            <tr>
+              <td><%= r.id %></td>
+              <td><%= r.class_name %></td>
+              <td><%= r.name %></td>
+              <td><%= r.start_at ? new Date(r.start_at).toLocaleDateString('vi-VN') : '-' %></td>
+              <td><%= r.end_at ? new Date(r.end_at).toLocaleDateString('vi-VN') : '-' %></td>
+              <td><a class="btn btn-outline" href="/admin/plans/<%= r.id %>">Chi tiết</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <p><a href="/admin">Quay lại Trang Quản Trị</a></p>
+    </div>
+  </div>
+</body>
+</html>

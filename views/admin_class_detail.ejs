@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chi tiết lớp</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+      <a href="/admin/classes">Quản lý lớp</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h2>Thông tin lớp</h2>
+      <% if (cls) { %>
+        <p><strong>ID:</strong> <%= cls.id %></p>
+        <p><strong>Tên lớp:</strong> <%= cls.name %></p>
+        <p><strong>Trạng thái:</strong> <%= cls.locked ? 'Đang khóa' : 'Đang mở' %></p>
+        <form class="inline form" method="POST" action="/admin/classes/<%= cls.id %>/rename">
+          <input class="input" type="text" name="name" placeholder="Tên lớp mới" required />
+          <button class="btn btn-primary" type="submit">Sửa lớp</button>
+        </form>
+        <form class="inline" method="POST" action="/admin/classes/<%= cls.id %>/lock">
+          <input type="hidden" name="action" value="<%= cls.locked ? 'unlock' : 'lock' %>" />
+          <button class="btn btn-outline" type="submit"><%= cls.locked ? 'Mở lớp' : 'Khóa lớp' %></button>
+        </form>
+      <% } %>
+    </div>
+
+    <div class="card">
+      <h2>Danh sách học sinh của lớp</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Họ tên</th>
+            <th>Username</th>
+            <th>Streak</th>
+            <th>Sao</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (students || []).forEach(s => { %>
+            <tr>
+              <td><%= s.name %></td>
+              <td><%= s.username %></td>
+              <td><%= s.streak || 0 %></td>
+              <td><%= s.stars || 0 %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Bài tập của lớp</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID giao</th>
+            <th>Tiêu đề</th>
+            <th>Ngày giao</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (assignments || []).forEach(a => { %>
+            <tr>
+              <td><%= a.id %></td>
+              <td><%= a.title %></td>
+              <td><%= new Date(a.assigned_at).toLocaleString('vi-VN') %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <a href="/admin">Trang Quản Trị</a> · <a href="/admin/classes">Quản lý lớp</a>
+    </div>
+  </div>
+</body>
+</html>
+

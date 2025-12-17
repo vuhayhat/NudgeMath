@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quản lý lớp</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+    </nav>
+  </header>
+  <div class="container">
+  <div class="card">
+    <h1>Quản lý lớp</h1>
+    <form class="form" method="POST" action="/admin/classes">
+      <input class="input" type="text" name="name" placeholder="Tên lớp" required />
+      <button class="btn btn-primary" type="submit">Tạo lớp</button>
+    </form>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Tên lớp</th>
+          <th>Trạng thái</th>
+          <th>Hành động</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% (classes || []).forEach(cls => { %>
+          <tr>
+            <td><%= cls.id %></td>
+            <td><a href="/admin/classes/<%= cls.id %>"><%= cls.name %></a></td>
+            <td><%= cls.locked ? 'Đang khóa' : 'Đang mở' %></td>
+            <td>
+              <form class="inline" method="POST" action="/admin/classes/<%= cls.id %>/lock">
+                <input type="hidden" name="action" value="<%= cls.locked ? 'unlock' : 'lock' %>" />
+                <button class="btn btn-outline" type="submit"><%= cls.locked ? 'Mở lớp' : 'Khóa lớp' %></button>
+              </form>
+              <a href="/admin/classes/<%= cls.id %>">Chi tiết</a>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <p><a href="/admin">Quay lại Trang Quản Trị</a></p>
+  </div>
+  </div>
+</body>
+</html>
+

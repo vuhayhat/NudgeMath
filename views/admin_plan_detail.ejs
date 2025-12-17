@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chi tiết kế hoạch</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+      <a href="/admin/plans">Kế hoạch giao bài</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1><%= plan ? plan.name : 'Kế hoạch' %></h1>
+      <% if (plan) { %>
+        <p>Lớp: <strong><%= plan.class_name %></strong> · Thời gian: <%= plan.start_at ? new Date(plan.start_at).toLocaleDateString('vi-VN') : '-' %> → <%= plan.end_at ? new Date(plan.end_at).toLocaleDateString('vi-VN') : '-' %></p>
+        <form method="POST" action="/admin/plans/<%= plan.id %>/generate">
+          <button class="btn btn-secondary" type="submit">Sinh bài và giao cho lớp</button>
+        </form>
+      <% } %>
+      <h2>Mục kế hoạch</h2>
+      <form class="form" method="POST" action="/admin/plans/<%= plan.id %>/items">
+        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <input class="input" type="text" name="topic" placeholder="Chủ đề" />
+          <input class="input" type="text" name="skill" placeholder="Kỹ năng (tùy chọn)" />
+          <select class="input" name="difficulty">
+            <option value="">Độ khó</option>
+            <option value="easy">Dễ</option>
+            <option value="medium">Trung bình</option>
+            <option value="hard">Khó</option>
+          </select>
+        </div>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+          <input class="input" type="number" name="count" placeholder="Số câu" value="1" />
+          <input class="input" type="date" name="due_at" />
+        </div>
+        <button class="btn btn-primary" type="submit">Thêm mục</button>
+      </form>
+
+      <table class="table" style="margin-top:16px">
+        <thead>
+          <tr>
+            <th>Chủ đề</th>
+            <th>Kỹ năng</th>
+            <th>Độ khó</th>
+            <th>Số câu</th>
+            <th>Hạn</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (items || []).forEach(it => { %>
+            <tr>
+              <td><%= it.topic || '-' %></td>
+              <td><%= it.skill || '-' %></td>
+              <td><%= it.difficulty || '-' %></td>
+              <td><%= it.count || 1 %></td>
+              <td><%= it.due_at ? new Date(it.due_at).toLocaleDateString('vi-VN') : '-' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

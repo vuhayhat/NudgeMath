@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bài đã nộp và nhận xét</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/student">Trang Học Sinh</a>
+      <a href="/student/dashboard">Dashboard</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Bài đã nộp và nhận xét</h1>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Tiêu đề</th>
+            <th>Kết quả</th>
+            <th>Điểm</th>
+            <th>Nhận xét</th>
+            <th>Nudge/Sticker/Sao</th>
+            <th>Ngày nộp</th>
+            <th>Ảnh</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (rows || []).forEach(r => { %>
+            <tr>
+              <td><%= r.title %></td>
+              <td><%= r.autograded ? (r.is_correct ? 'Đúng' : 'Sai') : 'Đã gửi' %></td>
+              <td><%= r.grade == null ? '-' : r.grade %></td>
+              <td><pre><%= r.feedback || '-' %></pre></td>
+              <td><%= [r.nudge || '-', r.sticker || '-', `Sao: ${r.stars || 0}`].join(' · ') %></td>
+              <td><%= new Date(r.submitted_at).toLocaleString('vi-VN') %></td>
+              <td>
+                <% if (r.images && r.images.length) { %>
+                  <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                    <% r.images.forEach(img => { %>
+                      <a href="/uploads/<%= img %>" target="_blank">
+                        <img src="/uploads/<%= img %>" alt="ảnh" style="width:100%;max-height:80px;object-fit:cover;border:1px solid var(--border);border-radius:6px" />
+                      </a>
+                    <% }) %>
+                  </div>
+                <% } else { %>
+                  <span class="muted">Không có ảnh</span>
+                <% } %>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="7">
+                <% if (r.explanation) { %>
+                  <div class="alert alert-info"><pre><%= r.explanation %></pre></div>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

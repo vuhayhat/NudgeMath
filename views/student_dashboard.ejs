@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard Học Sinh</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/student">Đăng nhập</a>
+    </nav>
+  </header>
+  <div class="container">
+  <div class="card">
+    <h1>Dashboard Học Sinh</h1>
+    <p>Xin chào, <%= name %></p>
+    <p><a class="btn btn-primary" href="/student/exercises">Xem bài tập được giao</a></p>
+    <p><a class="btn btn-secondary" href="/student/submissions">Xem nhận xét của giáo viên</a></p>
+    <form method="POST" action="/student/logout">
+      <button class="btn btn-danger" type="submit">Đăng xuất</button>
+    </form>
+    <p><a href="/">Trang chủ</a></p>
+  </div>
+  </div>
+</body>
+</html>
