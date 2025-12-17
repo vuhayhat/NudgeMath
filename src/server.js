@@ -184,6 +184,21 @@ const NUDGE_POLICY = {
   }
 }
 
+function resolvePdfFont() {
+  const candidates = [
+    process.env.PDF_FONT_PATH,
+    'C:/Windows/Fonts/segoeui.ttf',
+    'C:/Windows/Fonts/arial.ttf',
+    'C:/Windows/Fonts/tahoma.ttf',
+    'C:/Windows/Fonts/times.ttf',
+    'C:/Windows/Fonts/verdana.ttf'
+  ].filter(Boolean)
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p } catch {}
+  }
+  return null
+}
+
 async function safeFetch(url, options = {}) {
   if (typeof globalThis.fetch === 'function') return globalThis.fetch(url, options)
   return new Promise((resolve, reject) => {
@@ -648,10 +663,10 @@ app.get('/admin/progress/export/pdf', async (req, res) => {
   res.setHeader('Content-Disposition', 'attachment; filename="tien_do.pdf"')
   const doc = new PDFDocument({ margin: 40 })
   doc.pipe(res)
-  try {
-    const arialPath = 'C:/Windows/Fonts/arial.ttf'
-    if (fs.existsSync(arialPath)) doc.font(arialPath)
-  } catch {}
+  const fp = resolvePdfFont()
+  if (fp) {
+    try { doc.font(fp) } catch {}
+  }
   doc.fontSize(18).text('Báo cáo tiến độ học sinh', { align: 'center' })
   doc.moveDown()
   doc.fontSize(12)
