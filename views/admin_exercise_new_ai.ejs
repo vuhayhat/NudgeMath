@@ -17,27 +17,27 @@
   <div class="container">
     <div class="card">
       <h1>Tạo bài bằng AI</h1>
-      <% if (error) { %>
+      <% if (typeof error !== 'undefined' && error) { %>
         <div style="background:#ffe8e8;color:#a60;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Lỗi Gemini: <%= error %></div>
       <% } %>
       <form class="form" method="POST" action="/admin/exercises/new/ai" id="ai-form">
         <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
           <select class="input" name="grade_level" required>
-            <option value="10">Lớp 10</option>
-            <option value="11">Lớp 11</option>
-            <option value="12">Lớp 12</option>
+            <option value="10" <%= selectedGrade==='10'?'selected':'' %>>Lớp 10</option>
+            <option value="11" <%= selectedGrade==='11'?'selected':'' %>>Lớp 11</option>
+            <option value="12" <%= selectedGrade==='12'?'selected':'' %>>Lớp 12</option>
           </select>
           <select class="input" name="difficulty" required>
-            <option value="easy">Dễ</option>
-            <option value="medium">Trung bình</option>
-            <option value="hard">Khó</option>
+            <option value="easy" <%= selectedDifficulty==='easy'?'selected':'' %>>Dễ</option>
+            <option value="medium" <%= selectedDifficulty==='medium'?'selected':'' %>>Trung bình</option>
+            <option value="hard" <%= selectedDifficulty==='hard'?'selected':'' %>>Khó</option>
           </select>
-          <input class="input" type="text" name="topic" placeholder="Chủ đề (ví dụ: hàm số, tích phân)" required />
+          <input class="input" type="text" name="topic" placeholder="Chủ đề (ví dụ: hàm số, tích phân)" value="<%= selectedTopic %>" required />
         </div>
         <select class="input" name="class_id">
           <option value="">Gán cho lớp (tùy chọn)</option>
           <% (classes || []).forEach(c => { %>
-            <option value="<%= c.id %>"><%= c.name %></option>
+            <option value="<%= c.id %>" <%= String(selectedClassId||'')===String(c.id)?'selected':'' %>><%= c.name %></option>
           <% }) %>
         </select>
         <button class="btn btn-primary" type="submit" id="submit-btn">Tạo bài bằng AI</button>
@@ -45,7 +45,7 @@
       <p class="muted">Hệ thống sẽ tạo câu hỏi, 4 đáp án, đáp án đúng và giải thích chi tiết.</p>
     </div>
   </div>
-  <div id="loading" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;">
+  <div id="loading" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);color:#fff;align-items:center;justify-content:center;font-size:16px;">
     <div style="background:rgba(0,0,0,0.6);padding:16px 20px;border-radius:8px;">Đang sinh bài bằng Gemini, vui lòng đợi...</div>
   </div>
   <script>

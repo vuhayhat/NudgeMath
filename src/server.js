@@ -124,6 +124,7 @@ async function maybeSeedStudent() {
 }
 
 const port = process.env.PORT || 3000
+let lastGeminiCall = 0
 
 Promise.all([maybeSeedAdmin(), maybeSeedStudent()]).finally(() => {
   app.listen(port, '0.0.0.0', () => {
@@ -219,50 +220,72 @@ async function generateAIQuestionGemini(grade, difficulty, topic) {
       }
     ]
   }
-  const resp = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  if (!resp.ok) throw new Error(`Gemini error: ${resp.status}`)
-  const data = await resp.json()
-  const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('\n') || ''
-  let jsonText = text.trim()
-  const m = jsonText.match(/```json[\s\S]*?```/) || jsonText.match(/\{[\s\S]*\}/)
-  if (m) {
-    jsonText = m[0]
-    if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '')
+  const delays = [1200, 2500, 5000]
+  const minInterval = parseInt(process.env.GEMINI_MIN_INTERVAL_MS || '1200', 10)
+  for (let i = 0; i <= delays.length; i++) {
+    const now = Date.now()
+    const wait = Math.max(0, lastGeminiCall + minInterval - now)
+    if (wait > 0) await new Promise(r => setTimeout(r, wait))
+    lastGeminiCall = Date.now()
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    if (resp.status === 429 && i < delays.length) {
+      await new Promise(r => setTimeout(r, delays[i]))
+      continue
+    }
+    if (!resp.ok) throw new Error(`Gemini error: ${resp.status}`)
+    const data = await resp.json()
+    const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('\n') || ''
+    let jsonText = text.trim()
+    const m = jsonText.match(/```json[\s\S]*?```/) || jsonText.match(/\{[\s\S]*\}/)
+    if (m) {
+      jsonText = m[0]
+      if (jsonText.startsWith('```')) jsonText = jsonText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '')
+    }
+    const parsed = JSON.parse(jsonText)
+    const question = String(parsed.question || '')
+    const opts = parsed.opts || { A: '', B: '', C: '', D: '' }
+    const answer = String(parsed.answer || 'A').toUpperCase()
+    const explains = parsed.explains || { A: '', B: '', C: '', D: '' }
+    const solution = String(parsed.solution || '')
+    if (!question || !opts.A || !opts.B || !opts.C || !opts.D) throw new Error('Invalid Gemini output')
+    return { question, opts, answer, explains, solution }
   }
-  const parsed = JSON.parse(jsonText)
-  const question = String(parsed.question || '')
-  const opts = parsed.opts || { A: '', B: '', C: '', D: '' }
-  const answer = String(parsed.answer || 'A').toUpperCase()
-  const explains = parsed.explains || { A: '', B: '', C: '', D: '' }
-  const solution = String(parsed.solution || '')
-  if (!question || !opts.A || !opts.B || !opts.C || !opts.D) throw new Error('Invalid Gemini output')
-  return { question, opts, answer, explains, solution }
+  throw new Error('Gemini error: 429')
 }
 
 app.get('/admin/exercises/new/ai', async (req, res) => {
-  if (!usePg) return res.render('admin_exercise_new_ai', { classes: [], error: req.query.error || null })
+  if (!usePg) return res.render('admin_exercise_new_ai', { classes: [], error: req.query.error || null, selectedGrade: req.query.grade_level || null, selectedDifficulty: req.query.difficulty || null, selectedTopic: req.query.topic || '', selectedClassId: req.query.class_id || '' })
   const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
-  res.render('admin_exercise_new_ai', { classes: classes.rows, error: req.query.error || null })
+  res.render('admin_exercise_new_ai', { classes: classes.rows, error: req.query.error || null, selectedGrade: req.query.grade_level || null, selectedDifficulty: req.query.difficulty || null, selectedTopic: req.query.topic || '', selectedClassId: req.query.class_id || '' })
 })
 
 app.post('/admin/exercises/new/ai', async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
   const { grade_level, difficulty, topic, class_id } = req.body
+  const g = grade_level ? parseInt(grade_level, 10) : null
+  const d = (difficulty || '').toLowerCase()
+  const t = (topic || '').trim()
+  if (!t) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Bạn chưa nhập chủ đề')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`)
+  if (!g || ![10,11,12].includes(g)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Lớp không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`)
+  if (!['easy','medium','hard'].includes(d)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Độ khó không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`)
   try {
-    const gen = await generateAIQuestionGemini(grade_level ? parseInt(grade_level, 10) : null, difficulty, topic)
+    const gen = await generateAIQuestionGemini(g, d, t)
     const title = gen.question.slice(0, 120)
     const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`
-    const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, grade_level ? parseInt(grade_level, 10) : null, difficulty || null, topic || null])
+    const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, g, d || null, t || null])
     const exId = created.rows[0].id
     if (class_id) await pool.query('INSERT INTO assignments (class_id, exercise_id) VALUES ($1,$2)', [parseInt(class_id, 10), exId])
     res.redirect('/admin/exercises?ai=done')
   } catch (e) {
-    const msg = encodeURIComponent(e && e.message ? e.message : 'Gemini bị lỗi')
-    res.redirect(`/admin/exercises/new/ai?error=${msg}`)
+    let raw = e && e.message ? e.message : 'Gemini bị lỗi'
+    if (/429/.test(raw)) raw = '429 - vượt hạn mức hoặc rate limit, vui lòng thử lại sau'
+    const qs = `grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`
+    const msg = encodeURIComponent(raw)
+    res.redirect(`/admin/exercises/new/ai?error=${msg}&${qs}`)
   }
 })
 
