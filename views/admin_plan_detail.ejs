@@ -17,6 +17,12 @@
   <div class="container">
     <div class="card">
       <h1><%= plan ? plan.name : 'Kế hoạch' %></h1>
+      <% if (typeof ok !== 'undefined' && ok) { %>
+        <div style="background:#e7ffe7;color:#0a0;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Đã sinh và giao <strong><%= ok %></strong> bài AI</div>
+      <% } %>
+      <% if (typeof fail !== 'undefined' && fail) { %>
+        <div style="background:#ffe8e8;color:#a60;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Có <strong><%= fail %></strong> mục lỗi khi sinh AI (thiếu chủ đề hoặc API hạn mức)</div>
+      <% } %>
       <% if (plan) { %>
         <p>Lớp: <strong><%= plan.class_name %></strong> · Thời gian: <%= plan.start_at ? new Date(plan.start_at).toLocaleDateString('vi-VN') : '-' %> → <%= plan.end_at ? new Date(plan.end_at).toLocaleDateString('vi-VN') : '-' %></p>
         <form method="POST" action="/admin/plans/<%= plan.id %>/generate">
@@ -35,9 +41,22 @@
             <option value="hard">Khó</option>
           </select>
         </div>
-        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
           <input class="input" type="number" name="count" placeholder="Số câu" value="1" />
+          <select class="input" name="frequency">
+            <option value="">Một lần</option>
+            <option value="daily">Hàng ngày</option>
+            <option value="weekly">Hàng tuần</option>
+          </select>
+          <select class="input" name="strategy">
+            <option value="">Cố định</option>
+            <option value="progress">Theo tiến độ lớp</option>
+          </select>
           <input class="input" type="date" name="due_at" />
+        </div>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+          <input class="input" type="date" name="range_start" placeholder="Bắt đầu" />
+          <input class="input" type="date" name="range_end" placeholder="Kết thúc" />
         </div>
         <button class="btn btn-primary" type="submit">Thêm mục</button>
       </form>

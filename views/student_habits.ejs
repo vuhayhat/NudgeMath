@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Thói quen học</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/student/dashboard">Dashboard</a>
+      <a href="/student/exercises">Bài tập</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Thói quen học</h1>
+      <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div class="tile"><div class="title">Chuỗi ngày</div><div><strong><%= streak %></strong></div></div>
+        <div class="tile"><div class="title">Sao tích lũy</div><div><strong><%= stars %></strong> ⭐</div></div>
+        <div class="tile"><div class="title">Sticker</div><div><strong><%= stickers.length %></strong></div></div>
+      </div>
+      <% if (stickers && stickers.length) { %>
+        <h3 style="margin-top:16px;">Bộ sưu tập Sticker</h3>
+        <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 8px;">
+          <% stickers.forEach(s => { %>
+            <div class="tile" style="text-align:center;">
+              <div style="font-size:20px"><%= s.sticker %></div>
+              <div class="muted">x<%= s.count %></div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+      <h3 style="margin-top:16px;">Nudge gần đây</h3>
+      <table class="table">
+        <thead><tr><th>Thời gian</th><th>Sticker</th><th>Nudge</th><th>⭐</th><th>Streak ±</th></tr></thead>
+        <tbody>
+          <% (rows || []).forEach(r => { %>
+            <tr>
+              <td><%= r.submitted_at ? new Date(r.submitted_at).toLocaleString('vi-VN') : '-' %></td>
+              <td><%= r.sticker || '-' %></td>
+              <td><%= r.nudge || '-' %></td>
+              <td><%= r.stars || 0 %></td>
+              <td><%= r.streak_delta || 0 %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <p><a class="btn btn-outline" href="/student/dashboard">Quay lại Dashboard</a></p>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tin nhắn</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/student/dashboard">Dashboard</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Tin nhắn</h1>
+      <table class="table">
+        <thead><tr><th>Thời gian</th><th>Nội dung</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+        <tbody>
+          <% (rows || []).forEach(m => { %>
+            <tr>
+              <td><%= m.created_at ? new Date(m.created_at).toLocaleString('vi-VN') : '-' %></td>
+              <td><%= m.content %></td>
+              <td><%= m.is_read ? 'Đã đọc' : 'Chưa đọc' %></td>
+              <td>
+                <% if (!m.is_read) { %>
+                  <form class="inline" method="POST" action="/student/messages/<%= m.id %>/read">
+                    <button class="btn btn-outline" type="submit">Đánh dấu đã đọc</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <p><a class="btn btn-outline" href="/student/dashboard">Quay lại Dashboard</a></p>
+    </div>
+  </div>
+</body>
+</html>

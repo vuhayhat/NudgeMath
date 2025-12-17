@@ -7,6 +7,7 @@ import fs from 'fs'
 import multer from 'multer'
 import https from 'https'
 import http from 'http'
+import PDFDocument from 'pdfkit'
 import { fileURLToPath } from 'url'
 import { pool, ensureSchema } from './db.js'
 import bcrypt from 'bcryptjs'
@@ -85,8 +86,42 @@ function requireStudent(req, res, next) {
   res.redirect('/student?error=Bạn%20cần%20đăng%20nhập')
 }
 
-app.get('/student/dashboard', requireStudent, (req, res) => {
-  res.render('student_dashboard', { name: req.session.studentName })
+app.get('/student/dashboard', requireStudent, async (req, res) => {
+  if (!usePg) return res.render('student_dashboard', { name: req.session.studentName, stats: null, topics: [] })
+  const sid = req.session.studentId
+  const totalsQ = await pool.query('SELECT COUNT(*)::int AS total, SUM(CASE WHEN is_correct THEN 1 ELSE 0 END)::int AS correct, SUM(CASE WHEN autograded THEN 1 ELSE 0 END)::int AS autograded FROM submissions WHERE student_id=$1', [sid])
+  const totals = totalsQ.rows[0] || { total: 0, correct: 0, autograded: 0 }
+  const acc = totals.total ? Math.round((totals.correct / totals.total) * 100) : 0
+  const stuQ = await pool.query('SELECT streak, stars, class_id FROM students WHERE id=$1', [sid])
+  const stu = stuQ.rows[0] || { streak: 0, stars: 0, class_id: null }
+  const topicsQ = await pool.query(`
+    SELECT COALESCE(e.topic, 'khác') AS topic,
+           COUNT(*)::int AS total,
+           SUM(CASE WHEN s.is_correct THEN 1 ELSE 0 END)::int AS correct
+    FROM submissions s JOIN exercises e ON e.id=s.exercise_id
+    WHERE s.student_id=$1
+    GROUP BY COALESCE(e.topic, 'khác')
+    ORDER BY total DESC
+  `, [sid])
+  const topics = topicsQ.rows
+  const unreadQ = await pool.query('SELECT COUNT(*)::int AS cnt FROM messages WHERE (student_id=$1 OR class_id=$2) AND is_read=FALSE', [sid, stu.class_id || null])
+  const unread = unreadQ.rows[0]?.cnt || 0
+  const stats = { total: totals.total, correct: totals.correct, accuracy: acc, autograded: totals.autograded, streak: stu.streak, stars: stu.stars }
+  res.render('student_dashboard', { name: req.session.studentName, stats, topics, unread })
+})
+
+app.get('/student/habits', requireStudent, async (req, res) => {
+  if (!usePg) return res.render('student_habits', { rows: [], stickers: [], streak: 0, stars: 0 })
+  const sid = req.session.studentId
+  const subsQ = await pool.query('SELECT submitted_at, nudge, sticker, stars, streak_delta FROM submissions WHERE student_id=$1 ORDER BY submitted_at DESC LIMIT 20', [sid])
+  const stuQ = await pool.query('SELECT streak, stars FROM students WHERE id=$1', [sid])
+  const stu = stuQ.rows[0] || { streak: 0, stars: 0 }
+  const counts = {}
+  for (const r of subsQ.rows) {
+    if (r.sticker) counts[r.sticker] = (counts[r.sticker] || 0) + 1
+  }
+  const stickers = Object.entries(counts).map(([sticker, count]) => ({ sticker, count }))
+  res.render('student_habits', { rows: subsQ.rows, stickers, streak: stu.streak, stars: stu.stars })
 })
 
 app.post('/student/logout', (req, res) => {
@@ -127,6 +162,27 @@ async function maybeSeedStudent() {
 
 const port = process.env.PORT || 3000
 let lastGeminiCall = 0
+const NUDGE_TONE = (process.env.NUDGE_TONE || 'gentle').toLowerCase()
+const NUDGE_POLICY = {
+  difficultyStars: { easy: 1, medium: 2, hard: 3 },
+  topicBonus: {
+    'tích phân': { hard: 1, medium: 0, easy: 0 },
+    'hàm số': { hard: 1, medium: 1, easy: 0 },
+    'hình học': { hard: 1, medium: 1, easy: 0 },
+    'xác suất': { hard: 1, medium: 0, easy: 0 }
+  },
+  stickers: { correct: '🎉', incorrect: '💡' },
+  messages: {
+    gentle: {
+      correct: (t) => `Rất tốt! Tiếp tục phát huy nhé. Nếu muốn nâng cao, thử thêm vài bài ${t || 'khó hơn'}`,
+      incorrect: (t) => `Chưa đúng nhưng bạn đang tiến bộ. Thử xem lại chủ đề ${t || 'vừa làm'}, bắt đầu từ ví dụ dễ trước, rồi tăng dần. Bạn làm được!`
+    },
+    coach: {
+      correct: (t) => `Làm tốt! Tiếp tục luyện ${t || 'chủ đề này'} với độ khó cao hơn để bứt phá.`,
+      incorrect: (t) => `Sai ở bước trọng tâm. Ôn lại nền tảng của ${t || 'chủ đề'}, luyện 2–3 bài dễ rồi quay lại bài này.`
+    }
+  }
+}
 
 async function safeFetch(url, options = {}) {
   if (typeof globalThis.fetch === 'function') return globalThis.fetch(url, options)
@@ -236,6 +292,30 @@ function generateAIQuestion(grade, difficulty, topic) {
     solution = 'Nguyên hàm 2x là x^2, giá trị từ 0 đến 1 là 1'
   }
   return { question, opts, answer, explains, solution }
+}
+
+function computeAutoNudge(e, selected, isCorrect) {
+  const d = (e.difficulty || '').toLowerCase()
+  const t = (e.topic || '').toLowerCase()
+  let stars = 0
+  let streak_delta = 0
+  let sticker = null
+  let nudge = ''
+  const baseStars = NUDGE_POLICY.difficultyStars[d] || 0
+  const bonus = (NUDGE_POLICY.topicBonus[t] && NUDGE_POLICY.topicBonus[t][d]) || 0
+  const tone = NUDGE_TONE === 'coach' ? 'coach' : 'gentle'
+  if (isCorrect) {
+    stars = baseStars + bonus
+    streak_delta = 1
+    sticker = NUDGE_POLICY.stickers.correct
+    nudge = NUDGE_POLICY.messages[tone].correct(t)
+  } else {
+    stars = 0
+    streak_delta = 0
+    sticker = NUDGE_POLICY.stickers.incorrect
+    nudge = NUDGE_POLICY.messages[tone].incorrect(t)
+  }
+  return { nudge, sticker, stars, streak_delta }
 }
 
 async function generateAIQuestionGemini(grade, difficulty, topic) {
@@ -352,16 +432,28 @@ app.post('/student/exercises/:id/submit', requireStudent, upload.array('images',
   let isCorrect = null
   let autograded = false
   let explanation = null
+  let nudge = null
+  let sticker = null
+  let starsAward = 0
+  let streakDelta = 0
   if (e.mode === 'ai') {
     isCorrect = selected === e.answer
     autograded = true
     const map = { A: e.explain_a, B: e.explain_b, C: e.explain_c, D: e.explain_d }
     explanation = [map[selected] || '', e.ai_solution || ''].filter(Boolean).join('\n')
+    const auto = computeAutoNudge(e, selected, isCorrect)
+    nudge = auto.nudge
+    sticker = auto.sticker
+    starsAward = auto.stars
+    streakDelta = auto.streak_delta
   }
   const files = Array.isArray(req.files) ? req.files : []
   const images = files.map(f => f.filename)
-  await pool.query('INSERT INTO submissions (student_id, exercise_id, selected, is_correct, autograded, explanation, content, images) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [req.session.studentId, id, selected || null, isCorrect, autograded, explanation, (content && content.trim()) ? content.trim() : null, images.length ? images : null])
-  res.render('student_result', { ex: e, selected, isCorrect, explanation, images })
+  const ins = await pool.query('INSERT INTO submissions (student_id, exercise_id, selected, is_correct, autograded, explanation, content, images, nudge, sticker, stars, streak_delta) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id', [req.session.studentId, id, selected || null, isCorrect, autograded, explanation, (content && content.trim()) ? content.trim() : null, images.length ? images : null, nudge || null, sticker || null, starsAward || 0, streakDelta || 0])
+  if (autograded) {
+    await pool.query('UPDATE students SET streak = GREATEST(0, streak + $1), stars = stars + $2 WHERE id=$3', [streakDelta || 0, starsAward || 0, req.session.studentId])
+  }
+  res.render('student_result', { ex: e, selected, isCorrect, explanation, images, nudge, sticker, starsAward, streakDelta })
 })
 
 app.get('/student/submissions', requireStudent, async (req, res) => {
@@ -487,6 +579,86 @@ app.post('/admin/exercises/assigned/:id/delete', async (req, res) => {
   res.redirect('/admin/exercises/assigned')
 })
 
+app.get('/admin/progress', async (req, res) => {
+  if (!usePg) return res.render('admin_progress', { rows: [] })
+  const rowsQ = await pool.query(`
+    SELECT s.id, s.name, s.username, c.name AS class_name,
+           COALESCE(COUNT(sub.*),0)::int AS total,
+           COALESCE(SUM(CASE WHEN sub.is_correct THEN 1 ELSE 0 END),0)::int AS correct,
+           s.stars::int AS stars,
+           s.streak::int AS streak,
+           MAX(sub.submitted_at) AS last_submitted
+    FROM students s
+    LEFT JOIN classes c ON c.id=s.class_id
+    LEFT JOIN submissions sub ON sub.student_id=s.id
+    GROUP BY s.id, c.name
+    ORDER BY c.name ASC NULLS LAST, s.id DESC
+  `)
+  const rows = rowsQ.rows
+  const leaders = rows.slice().sort((a,b) => (b.streak - a.streak) || (b.stars - a.stars)).slice(0, 10)
+  res.render('admin_progress', { rows, leaders })
+})
+
+app.get('/admin/progress/export/csv', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const rowsQ = await pool.query(`
+    SELECT s.name, s.username, c.name AS class_name,
+           COALESCE(COUNT(sub.*),0)::int AS total,
+           COALESCE(SUM(CASE WHEN sub.is_correct THEN 1 ELSE 0 END),0)::int AS correct,
+           s.stars::int AS stars,
+           s.streak::int AS streak,
+           MAX(sub.submitted_at) AS last_submitted
+    FROM students s
+    LEFT JOIN classes c ON c.id=s.class_id
+    LEFT JOIN submissions sub ON sub.student_id=s.id
+    GROUP BY s.id, c.name
+    ORDER BY c.name ASC NULLS LAST, s.id DESC
+  `)
+  const rows = rowsQ.rows
+  const header = ['Lớp','Học sinh','Username','Bài nộp','Đúng','Tỉ lệ','Sao','Chuỗi ngày','Lần nộp gần nhất']
+  const lines = [header.join(',')]
+  for (const r of rows) {
+    const acc = r.total ? Math.round((r.correct / r.total) * 100) : 0
+    const last = r.last_submitted ? new Date(r.last_submitted).toISOString() : ''
+    lines.push([r.class_name||'', r.name||'', r.username||'', r.total||0, r.correct||0, `${acc}%`, r.stars||0, r.streak||0, last].map(x => String(x).replace(/,/g,';')).join(','))
+  }
+  const csv = lines.join('\n')
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', 'attachment; filename="progress.csv"')
+  res.send(csv)
+})
+
+app.get('/admin/progress/export/pdf', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const rowsQ = await pool.query(`
+    SELECT s.name, s.username, c.name AS class_name,
+           COALESCE(COUNT(sub.*),0)::int AS total,
+           COALESCE(SUM(CASE WHEN sub.is_correct THEN 1 ELSE 0 END),0)::int AS correct,
+           s.stars::int AS stars,
+           s.streak::int AS streak
+    FROM students s
+    LEFT JOIN classes c ON c.id=s.class_id
+    LEFT JOIN submissions sub ON sub.student_id=s.id
+    GROUP BY s.id, c.name
+    ORDER BY c.name ASC NULLS LAST, s.id DESC
+  `)
+  const rows = rowsQ.rows
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', 'attachment; filename="progress.pdf"')
+  const doc = new PDFDocument({ margin: 40 })
+  doc.pipe(res)
+  doc.fontSize(18).text('Báo cáo tiến độ học sinh', { align: 'center' })
+  doc.moveDown()
+  doc.fontSize(12)
+  const max = Math.min(rows.length, 50)
+  for (let i = 0; i < max; i++) {
+    const r = rows[i]
+    const acc = r.total ? Math.round((r.correct / r.total) * 100) : 0
+    doc.text(`${r.class_name||'-'} · ${r.name||'-'} (${r.username||'-'}) · Nộp: ${r.total||0} · Đúng: ${r.correct||0} · ${acc}% · ⭐ ${r.stars||0} · Chuỗi: ${r.streak||0}`)
+  }
+  doc.end()
+})
+
 app.get('/admin/plans', async (req, res) => {
   if (!usePg) return res.render('admin_plans', { rows: [] })
   const rows = await pool.query('SELECT p.id, p.name, p.start_at, p.end_at, c.name AS class_name FROM learning_plans p JOIN classes c ON c.id=p.class_id ORDER BY p.id DESC')
@@ -512,14 +684,14 @@ app.get('/admin/plans/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10)
   const plan = await pool.query('SELECT p.*, c.name AS class_name FROM learning_plans p JOIN classes c ON c.id=p.class_id WHERE p.id=$1', [id])
   const items = await pool.query('SELECT * FROM plan_items WHERE plan_id=$1 ORDER BY id DESC', [id])
-  res.render('admin_plan_detail', { plan: plan.rows[0], items: items.rows })
+  res.render('admin_plan_detail', { plan: plan.rows[0], items: items.rows, ok: req.query.ok || null, fail: req.query.fail || null })
 })
 
 app.post('/admin/plans/:id/items', async (req, res) => {
   if (!usePg) return res.redirect('/admin/plans')
   const id = parseInt(req.params.id, 10)
-  const { topic, skill, difficulty, count, due_at } = req.body
-  await pool.query('INSERT INTO plan_items (plan_id, topic, skill, difficulty, count, due_at) VALUES ($1,$2,$3,$4,$5,$6)', [id, topic || null, skill || null, difficulty || null, count ? parseInt(count, 10) : 1, due_at || null])
+  const { topic, skill, difficulty, count, due_at, frequency, strategy, range_start, range_end } = req.body
+  await pool.query('INSERT INTO plan_items (plan_id, topic, skill, difficulty, frequency, strategy, range_start, range_end, count, due_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [id, topic || null, skill || null, difficulty || null, frequency || null, strategy || null, range_start || null, range_end || null, count ? parseInt(count, 10) : 1, due_at || null])
   res.redirect(`/admin/plans/${id}`)
 })
 
@@ -530,23 +702,82 @@ app.post('/admin/plans/:id/generate', async (req, res) => {
   const plan = planQ.rows[0]
   if (!plan) return res.redirect('/admin/plans')
   const itemsQ = await pool.query('SELECT * FROM plan_items WHERE plan_id=$1 ORDER BY id ASC', [id])
+  let ok = 0
+  let fail = 0
   for (const it of itemsQ.rows) {
     const grade_level = null
-    for (let i = 0; i < (it.count || 1); i++) {
-      let gen
+    const top = (it.topic || it.skill || '').trim()
+    if (!top) { fail++; continue }
+    let dates = []
+    const freq = (it.frequency || '').toLowerCase()
+    const rs = it.range_start ? new Date(it.range_start) : null
+    const re = it.range_end ? new Date(it.range_end) : null
+    if (freq === 'daily' && rs && re) {
+      const d0 = new Date(Date.UTC(rs.getUTCFullYear(), rs.getUTCMonth(), rs.getUTCDate()))
+      const d1 = new Date(Date.UTC(re.getUTCFullYear(), re.getUTCMonth(), re.getUTCDate()))
+      for (let d = new Date(d0); d <= d1; d = new Date(d.getTime() + 86400000)) dates.push(new Date(d))
+    } else if (freq === 'weekly' && rs && re) {
+      const d0 = new Date(Date.UTC(rs.getUTCFullYear(), rs.getUTCMonth(), rs.getUTCDate()))
+      const d1 = new Date(Date.UTC(re.getUTCFullYear(), re.getUTCMonth(), re.getUTCDate()))
+      for (let d = new Date(d0); d <= d1; d = new Date(d.getTime() + 7*86400000)) dates.push(new Date(d))
+    } else {
+      const due = it.due_at ? new Date(it.due_at) : null
+      const cnt = it.count || 1
+      for (let i = 0; i < cnt; i++) dates.push(due)
+    }
+    let diff = (it.difficulty || '').toLowerCase()
+    if ((it.strategy || '').toLowerCase() === 'progress') {
+      const statsQ = await pool.query(`SELECT COUNT(*)::int AS total, SUM(CASE WHEN s.is_correct THEN 1 ELSE 0 END)::int AS correct FROM submissions s JOIN students st ON st.id=s.student_id WHERE st.class_id=$1`, [plan.class_id])
+      const stats = statsQ.rows[0] || { total: 0, correct: 0 }
+      const acc = stats.total ? Math.round((stats.correct / stats.total) * 100) : 0
+      diff = acc < 50 ? 'easy' : (acc < 80 ? 'medium' : 'hard')
+    }
+    for (const due of dates) {
       try {
-        gen = await generateAIQuestionGemini(grade_level, it.difficulty, it.topic || it.skill)
+        const gen = await generateAIQuestionGemini(grade_level, diff || null, top)
+        const title = gen.question.slice(0, 120)
+        const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`
+        const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, grade_level, diff || null, top])
+        const exId = created.rows[0].id
+        await pool.query('INSERT INTO assignments (class_id, exercise_id, assigned_at) VALUES ($1,$2,$3)', [plan.class_id, exId, due || new Date()])
+        ok++
       } catch (e) {
-        gen = generateAIQuestion(grade_level, it.difficulty, it.topic || it.skill)
+        fail++
       }
-      const title = gen.question.slice(0, 120)
-      const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`
-      const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, grade_level, it.difficulty || null, it.topic || it.skill || null])
-      const exId = created.rows[0].id
-      await pool.query('INSERT INTO assignments (class_id, exercise_id) VALUES ($1,$2)', [plan.class_id, exId])
     }
   }
-  res.redirect(`/admin/plans/${id}`)
+  res.redirect(`/admin/plans/${id}?ok=${ok}&fail=${fail}`)
+})
+
+app.get('/admin/messages/new', async (req, res) => {
+  if (!usePg) return res.render('admin_message_new', { classes: [], students: [], student_id: req.query.student_id || null, class_id: req.query.class_id || null })
+  const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
+  const students = await pool.query('SELECT id, name, username FROM students ORDER BY id DESC')
+  res.render('admin_message_new', { classes: classes.rows, students: students.rows, student_id: req.query.student_id || null, class_id: req.query.class_id || null })
+})
+
+app.post('/admin/messages/send', async (req, res) => {
+  if (!usePg) return res.redirect('/admin')
+  const { student_id, class_id, content } = req.body
+  if (!content || (!student_id && !class_id)) return res.redirect('/admin/messages/new')
+  await pool.query('INSERT INTO messages (student_id, class_id, content) VALUES ($1,$2,$3)', [student_id ? parseInt(student_id, 10) : null, class_id ? parseInt(class_id, 10) : null, content.trim()])
+  res.redirect('/admin/progress')
+})
+
+app.get('/student/messages', requireStudent, async (req, res) => {
+  if (!usePg) return res.render('student_messages', { rows: [] })
+  const sid = req.session.studentId
+  const sQ = await pool.query('SELECT class_id FROM students WHERE id=$1', [sid])
+  const classId = sQ.rows[0]?.class_id || null
+  const rows = await pool.query('SELECT * FROM messages WHERE student_id=$1 OR class_id=$2 ORDER BY created_at DESC', [sid, classId])
+  res.render('student_messages', { rows: rows.rows })
+})
+
+app.post('/student/messages/:id/read', requireStudent, async (req, res) => {
+  if (!usePg) return res.redirect('/student/messages')
+  const id = parseInt(req.params.id, 10)
+  await pool.query('UPDATE messages SET is_read=TRUE WHERE id=$1', [id])
+  res.redirect('/student/messages')
 })
 
 app.get('/admin/exercises/:id/submissions', async (req, res) => {

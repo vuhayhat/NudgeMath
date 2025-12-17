@@ -137,9 +137,22 @@ export async function ensureSchema() {
       topic TEXT,
       skill TEXT,
       difficulty TEXT,
+      frequency TEXT,
+      strategy TEXT,
+      range_start TIMESTAMPTZ,
+      range_end TIMESTAMPTZ,
       count INT DEFAULT 1,
       due_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      student_id INT REFERENCES students(id) ON DELETE CASCADE,
+      class_id INT REFERENCES classes(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      is_read BOOLEAN DEFAULT FALSE
     );
   `)
 }

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gửi nhắc nhở</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Gửi nhận xét/nhắc nhở</h1>
+      <form class="form" method="POST" action="/admin/messages/send">
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
+          <select class="input" name="student_id">
+            <option value="">Chọn học sinh</option>
+            <% (students || []).forEach(s => { %>
+              <option value="<%= s.id %>" <%= String(student_id||'')===String(s.id)?'selected':'' %>><%= s.name %> (<%= s.username %>)</option>
+            <% }) %>
+          </select>
+          <select class="input" name="class_id">
+            <option value="">Hoặc chọn lớp</option>
+            <% (classes || []).forEach(c => { %>
+              <option value="<%= c.id %>" <%= String(class_id||'')===String(c.id)?'selected':'' %>><%= c.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <textarea class="input" name="content" rows="4" placeholder="Nội dung nhắc nhở/động viên" required></textarea>
+        <button class="btn btn-primary" type="submit">Gửi</button>
+      </form>
+      <p class="muted">Chọn một học sinh hoặc một lớp. Nếu chọn cả hai, sẽ ưu tiên gửi cho học sinh.</p>
+    </div>
+  </div>
+</body>
+</html>

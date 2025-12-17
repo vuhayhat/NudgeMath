@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tiến độ học sinh</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Tiến độ học sinh</h1>
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <a class="btn btn-secondary" href="/admin/progress/export/csv">Xuất Excel (CSV)</a>
+        <a class="btn btn-secondary" href="/admin/progress/export/pdf">Xuất PDF</a>
+      </div>
+      <% if (leaders && leaders.length) { %>
+        <h3>Bảng xếp hạng thói quen (Top 10)</h3>
+        <table class="table">
+          <thead><tr><th>Học sinh</th><th>Username</th><th>Lớp</th><th>Chuỗi ngày</th><th>Sao</th></tr></thead>
+          <tbody>
+            <% leaders.forEach(l => { %>
+              <tr>
+                <td><%= l.name || '-' %></td>
+                <td><%= l.username || '-' %></td>
+                <td><%= l.class_name || '-' %></td>
+                <td><%= l.streak %></td>
+                <td><%= l.stars %> ⭐</td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Lớp</th>
+            <th>Học sinh</th>
+            <th>Username</th>
+            <th>Bài nộp</th>
+            <th>Đúng</th>
+            <th>Tỉ lệ</th>
+            <th>Sao</th>
+            <th>Chuỗi ngày</th>
+            <th>Lần nộp gần nhất</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (rows || []).forEach(r => { %>
+            <tr>
+              <td><%= r.class_name || '-' %></td>
+              <td><%= r.name || '-' %></td>
+              <td><%= r.username || '-' %></td>
+              <td><%= r.total %></td>
+              <td><%= r.correct %></td>
+              <td><%= r.total ? Math.round((r.correct / r.total) * 100) : 0 %>%</td>
+              <td><%= r.stars %> ⭐</td>
+              <td><%= r.streak %></td>
+              <td>
+                <div><%= r.last_submitted ? new Date(r.last_submitted).toLocaleString('vi-VN') : '-' %></div>
+                <div style="margin-top:6px"><a class="btn btn-outline" href="/admin/messages/new?student_id=<%= r.id %>">Gửi nhắc</a></div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <p><a href="/admin">Quay lại Trang Quản Trị</a></p>
+    </div>
+  </div>
+</body>
+</html>

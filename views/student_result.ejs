@@ -23,6 +23,14 @@
         <% if (explanation) { %>
           <div class="alert alert-info"><pre><%= explanation %></pre></div>
         <% } %>
+        <% if (typeof nudge !== 'undefined' && nudge) { %>
+          <div class="alert" style="background:#f9fff2;border:1px solid #dce8c8;color:#2f6e2f;padding:8px 12px;border-radius:6px;">
+            <div><strong><%= sticker || '💬' %></strong> <%= nudge %></div>
+            <% if (typeof starsAward !== 'undefined') { %>
+              <div style="margin-top:6px;color:#b07f00;">+<%= starsAward %> ⭐</div>
+            <% } %>
+          </div>
+        <% } %>
       <% } else { %>
         <p>Đã gửi bài. Giáo viên sẽ đối chiếu và phản hồi.</p>
       <% } %>

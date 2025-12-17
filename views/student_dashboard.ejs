@@ -17,8 +17,41 @@
   <div class="card">
     <h1>Dashboard Học Sinh</h1>
     <p>Xin chào, <%= name %></p>
+    <% if (stats) { %>
+      <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div class="tile"><div class="title">Bài đã nộp</div><div><strong><%= stats.total %></strong></div></div>
+        <div class="tile"><div class="title">Đúng</div><div><strong><%= stats.correct %></strong> (<%= stats.accuracy %>% )</div></div>
+        <div class="tile"><div class="title">Chuỗi ngày</div><div><strong><%= stats.streak %></strong></div></div>
+      </div>
+      <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px;">
+        <div class="tile"><div class="title">Sao tích lũy</div><div><strong><%= stats.stars %></strong> ⭐</div></div>
+        <div class="tile"><div class="title">Tự chấm</div><div><strong><%= stats.autograded %></strong></div></div>
+      </div>
+      <% if (topics && topics.length) { %>
+        <h3 style="margin-top:16px;">Chủ đề bạn làm nhiều</h3>
+        <table class="table">
+          <thead><tr><th>Chủ đề</th><th>Làm</th><th>Đúng</th><th>Tỉ lệ</th></tr></thead>
+          <tbody>
+            <% topics.forEach(t => { %>
+              <tr>
+                <td><%= t.topic %></td>
+                <td><%= t.total %></td>
+                <td><%= t.correct %></td>
+                <td><%= t.total ? Math.round((t.correct/t.total)*100) : 0 %>%</td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% const worst = topics.slice().sort((a,b)=>((a.total? a.correct/a.total:0)-(b.total? b.correct/b.total:0)))[0]; %>
+        <% if (worst && worst.total >= 3 && (worst.correct/worst.total) < 0.6) { %>
+          <div class="alert" style="background:#fff8e1;border:1px solid #f0e5b5;color:#7a5f00;padding:8px 12px;border-radius:6px;">Gợi ý: Bạn nên luyện thêm chủ đề <strong><%= worst.topic %></strong>. Bắt đầu từ bài dễ, sau đó tăng dần độ khó để cải thiện.</div>
+        <% } %>
+      <% } %>
+    <% } %>
     <p><a class="btn btn-primary" href="/student/exercises">Xem bài tập được giao</a></p>
     <p><a class="btn btn-secondary" href="/student/submissions">Xem nhận xét của giáo viên</a></p>
+    <p><a class="btn btn-secondary" href="/student/habits">Thói quen học</a></p>
+    <p><a class="btn btn-secondary" href="/student/messages">Tin nhắn<% if (typeof unread !== 'undefined' && unread) { %> (<%= unread %> chưa đọc)<% } %></a></p>
     <form method="POST" action="/student/logout">
       <button class="btn btn-danger" type="submit">Đăng xuất</button>
     </form>
