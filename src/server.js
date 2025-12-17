@@ -5,6 +5,8 @@ import dotenv from 'dotenv'
 import path from 'path'
 import fs from 'fs'
 import multer from 'multer'
+import https from 'https'
+import http from 'http'
 import { fileURLToPath } from 'url'
 import { pool, ensureSchema } from './db.js'
 import bcrypt from 'bcryptjs'
@@ -126,6 +128,41 @@ async function maybeSeedStudent() {
 const port = process.env.PORT || 3000
 let lastGeminiCall = 0
 
+async function safeFetch(url, options = {}) {
+  if (typeof globalThis.fetch === 'function') return globalThis.fetch(url, options)
+  return new Promise((resolve, reject) => {
+    try {
+      const u = new URL(url)
+      const isHttps = u.protocol === 'https:'
+      const mod = isHttps ? https : http
+      const req = mod.request({
+        method: options.method || 'GET',
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        port: u.port || (isHttps ? 443 : 80),
+        headers: options.headers || {}
+      }, res => {
+        const chunks = []
+        res.on('data', c => chunks.push(c))
+        res.on('end', () => {
+          const bodyStr = Buffer.concat(chunks).toString('utf8')
+          resolve({
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            status: res.statusCode,
+            json: async () => JSON.parse(bodyStr || '{}'),
+            text: async () => bodyStr
+          })
+        })
+      })
+      req.on('error', reject)
+      if (options.body) req.write(options.body)
+      req.end()
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
 Promise.all([maybeSeedAdmin(), maybeSeedStudent()]).finally(() => {
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}`)
@@ -227,7 +264,7 @@ async function generateAIQuestionGemini(grade, difficulty, topic) {
     const wait = Math.max(0, lastGeminiCall + minInterval - now)
     if (wait > 0) await new Promise(r => setTimeout(r, wait))
     lastGeminiCall = Date.now()
-    const resp = await fetch(endpoint, {
+    const resp = await safeFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
