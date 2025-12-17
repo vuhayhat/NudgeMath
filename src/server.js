@@ -623,9 +623,10 @@ app.get('/admin/progress/export/csv', async (req, res) => {
     lines.push([r.class_name||'', r.name||'', r.username||'', r.total||0, r.correct||0, `${acc}%`, r.stars||0, r.streak||0, last].map(x => String(x).replace(/,/g,';')).join(','))
   }
   const csv = lines.join('\n')
+  const bom = '\uFEFF'
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-  res.setHeader('Content-Disposition', 'attachment; filename="progress.csv"')
-  res.send(csv)
+  res.setHeader('Content-Disposition', 'attachment; filename="tien_do.csv"')
+  res.send(bom + csv)
 })
 
 app.get('/admin/progress/export/pdf', async (req, res) => {
@@ -644,9 +645,13 @@ app.get('/admin/progress/export/pdf', async (req, res) => {
   `)
   const rows = rowsQ.rows
   res.setHeader('Content-Type', 'application/pdf')
-  res.setHeader('Content-Disposition', 'attachment; filename="progress.pdf"')
+  res.setHeader('Content-Disposition', 'attachment; filename="tien_do.pdf"')
   const doc = new PDFDocument({ margin: 40 })
   doc.pipe(res)
+  try {
+    const arialPath = 'C:/Windows/Fonts/arial.ttf'
+    if (fs.existsSync(arialPath)) doc.font(arialPath)
+  } catch {}
   doc.fontSize(18).text('Báo cáo tiến độ học sinh', { align: 'center' })
   doc.moveDown()
   doc.fontSize(12)
