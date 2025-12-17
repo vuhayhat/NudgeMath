@@ -288,6 +288,35 @@ async function main() {
   }
   await seedSurveyWeek1()
 
+  async function seedSurveysProgressive() {
+    const plans = [
+      { start: '2025-09-29', selfRate: 0.40, latePct: 45 },
+      { start: '2025-10-06', selfRate: 0.50, latePct: 40 },
+      { start: '2025-10-13', selfRate: 0.60, latePct: 35 },
+      { start: '2025-10-20', selfRate: 0.70, latePct: 30 },
+      { start: '2025-10-27', selfRate: 0.75, latePct: 25 },
+      { start: '2025-11-03', selfRate: 0.80, latePct: 22 },
+      { start: '2025-11-10', selfRate: 0.85, latePct: 18 }
+    ]
+    for (const p of plans) {
+      for (const cn of ['11 A8','12 A1','12 A6','12 A8']) {
+        const classId = classMap.get(cn)
+        if (!classId) continue
+        const cntQ = await pool.query('SELECT COUNT(*)::int AS cnt FROM students WHERE class_id=$1', [classId])
+        const total = cntQ.rows[0]?.cnt || 0
+        const self = Math.max(0, Math.min(total, Math.round(total * p.selfRate)))
+        const notSelf = Math.max(0, total - self)
+        await pool.query(
+          `INSERT INTO surveys (class_id, week_start, surveyed_students, self_disciplined, not_self_disciplined, late_rate_pct)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (class_id, week_start) DO UPDATE SET surveyed_students=EXCLUDED.surveyed_students, self_disciplined=EXCLUDED.self_disciplined, not_self_disciplined=EXCLUDED.not_self_disciplined, late_rate_pct=EXCLUDED.late_rate_pct`,
+          [classId, p.start, total, self, notSelf, p.latePct]
+        )
+      }
+    }
+  }
+  await seedSurveysProgressive()
+
   process.exit(0)
 }
 
