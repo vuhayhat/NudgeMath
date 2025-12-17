@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="/">NudgeMath</a>
+    <a class="brand" href="/"><img class="logo" src="/logo.svg" alt="">NudgeMath</a>
     <nav class="nav">
       <a href="/admin">Trang Quản Trị</a>
       <a href="/admin/exercises">Quản lý bài tập</a>
@@ -41,12 +41,16 @@
           <option value="C">C</option>
           <option value="D">D</option>
         </select>
-        <select class="input" name="class_id">
-          <option value="">Gán cho lớp (tùy chọn)</option>
-          <% (classes || []).forEach(c => { %>
-            <option value="<%= c.id %>"><%= c.name %></option>
-          <% }) %>
-        </select>
+        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <select class="input" name="class_id">
+            <option value="">Gán cho lớp (tùy chọn)</option>
+            <% (classes || []).forEach(c => { %>
+              <option value="<%= c.id %>"><%= c.name %></option>
+            <% }) %>
+          </select>
+          <input class="input" type="datetime-local" name="due_at" placeholder="Ngày kết thúc (tùy chọn)" />
+          <input class="input" type="number" name="due_hours" min="1" placeholder="Giờ kết thúc sau (>=1 giờ)" />
+        </div>
         <button class="btn btn-primary" type="submit">Tạo bài</button>
       </form>
     </div>

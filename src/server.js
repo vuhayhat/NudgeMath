@@ -235,30 +235,38 @@ async function safeFetch(url, options = {}) {
 }
 
 Promise.all([maybeSeedAdmin(), maybeSeedStudent()]).finally(() => {
+  ensureWeeklyAggregationJob()
   app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on http://0.0.0.0:${port}`)
   })
 })
 
 app.get('/admin/classes', (req, res) => {
-  if (!usePg) return res.render('admin_classes', { classes: [], created: null })
+  if (!usePg) return res.render('admin_classes', { classes: [], created: null, deleted: null })
   pool.query('SELECT * FROM classes ORDER BY id DESC').then(r => {
-    res.render('admin_classes', { classes: r.rows, created: req.query.created || null })
+    res.render('admin_classes', { classes: r.rows, created: req.query.created || null, deleted: req.query.deleted || null })
   })
 })
 
 app.get('/admin/students', async (req, res) => {
-  if (!usePg) return res.render('admin_students', { students: [], classes: [], createdUser: null, createdPass: null })
+  if (!usePg) return res.render('admin_students', { students: [], classes: [], createdUser: null, createdPass: null, selectedClassId: '' })
   const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
-  const students = await pool.query('SELECT s.*, c.name AS class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id ORDER BY s.id DESC')
-  res.render('admin_students', { students: students.rows, classes: classes.rows, createdUser: req.query.user || null, createdPass: req.query.pass || null })
+  const classId = req.query.class_id ? parseInt(req.query.class_id, 10) : null
+  let students
+  if (classId) {
+    students = await pool.query('SELECT s.*, c.name AS class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id WHERE s.class_id=$1 ORDER BY s.id DESC', [classId])
+  } else {
+    students = await pool.query('SELECT s.*, c.name AS class_name FROM students s LEFT JOIN classes c ON c.id=s.class_id ORDER BY s.id DESC')
+  }
+  res.render('admin_students', { students: students.rows, classes: classes.rows, createdUser: req.query.user || null, createdPass: req.query.pass || null, selectedClassId: req.query.class_id || '' })
 })
 
 app.get('/admin/exercises', async (req, res) => {
-  if (!usePg) return res.render('admin_exercises', { exercises: [], classes: [], ai: req.query.ai || null })
+  if (!usePg) return res.render('admin_exercises', { exercises: [], classes: [], assignments: [], ai: req.query.ai || null, deleted: req.query.deleted || null })
   const exercises = await pool.query('SELECT * FROM exercises ORDER BY id DESC')
   const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
-  res.render('admin_exercises', { exercises: exercises.rows, classes: classes.rows, ai: req.query.ai || null })
+  const assignments = await pool.query('SELECT a.id, a.exercise_id, a.class_id, a.assigned_at, a.due_at, c.name AS class_name FROM assignments a JOIN classes c ON c.id=a.class_id ORDER BY a.id DESC')
+  res.render('admin_exercises', { exercises: exercises.rows, classes: classes.rows, assignments: assignments.rows, ai: req.query.ai || null, deleted: req.query.deleted || null })
 })
 
 app.get('/admin/exercises/new/manual', async (req, res) => {
@@ -269,13 +277,21 @@ app.get('/admin/exercises/new/manual', async (req, res) => {
 
 app.post('/admin/exercises/new/manual', async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
-  const { question, opt_a, opt_b, opt_c, opt_d, answer, class_id, topic, grade_level } = req.body
+  const { question, opt_a, opt_b, opt_c, opt_d, answer, class_id, topic, grade_level, due_at, due_hours } = req.body
   if (!question || !opt_a || !opt_b || !opt_c || !opt_d || !answer) return res.redirect('/admin/exercises')
   const title = question.slice(0, 120)
   const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, topic, grade_level) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`
   const created = await pool.query(q, [title, null, 'manual', question, opt_a, opt_b, opt_c, opt_d, answer, topic || null, grade_level ? parseInt(grade_level, 10) : null])
   const exId = created.rows[0].id
-  if (class_id) await pool.query('INSERT INTO assignments (class_id, exercise_id) VALUES ($1,$2)', [parseInt(class_id, 10), exId])
+  if (class_id) {
+    const h = due_hours ? parseInt(due_hours, 10) : null
+    if (h && h > 0) {
+      await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2, NOW() + make_interval(hours => $3))', [parseInt(class_id, 10), exId, h])
+    } else {
+      const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
+      await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [parseInt(class_id, 10), exId, dueAtStr])
+    }
+  }
   res.redirect('/admin/exercises')
 })
 
@@ -397,25 +413,33 @@ app.get('/admin/exercises/new/ai', async (req, res) => {
 
 app.post('/admin/exercises/new/ai', async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
-  const { grade_level, difficulty, topic, class_id } = req.body
+  const { grade_level, difficulty, topic, class_id, due_at, due_hours } = req.body
   const g = grade_level ? parseInt(grade_level, 10) : null
   const d = (difficulty || '').toLowerCase()
   const t = (topic || '').trim()
-  if (!t) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Bạn chưa nhập chủ đề')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`)
-  if (!g || ![10,11,12].includes(g)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Lớp không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`)
-  if (!['easy','medium','hard'].includes(d)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Độ khó không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`)
+  if (!t) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Bạn chưa nhập chủ đề')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
+  if (!g || ![10,11,12].includes(g)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Lớp không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
+  if (!['easy','medium','hard'].includes(d)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Độ khó không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
   try {
     const gen = await generateAIQuestionGemini(g, d, t)
     const title = gen.question.slice(0, 120)
     const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`
     const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, g, d || null, t || null])
     const exId = created.rows[0].id
-    if (class_id) await pool.query('INSERT INTO assignments (class_id, exercise_id) VALUES ($1,$2)', [parseInt(class_id, 10), exId])
+    if (class_id) {
+      const h = due_hours ? parseInt(due_hours, 10) : null
+      if (h && h > 0) {
+        await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2, NOW() + make_interval(hours => $3))', [parseInt(class_id, 10), exId, h])
+      } else {
+        const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
+        await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [parseInt(class_id, 10), exId, dueAtStr])
+      }
+    }
     res.redirect('/admin/exercises?ai=done')
   } catch (e) {
     let raw = e && e.message ? e.message : 'Gemini bị lỗi'
     if (/429/.test(raw)) raw = '429 - vượt hạn mức hoặc rate limit, vui lòng thử lại sau'
-    const qs = `grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}`
+    const qs = `grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`
     const msg = encodeURIComponent(raw)
     res.redirect(`/admin/exercises/new/ai?error=${msg}&${qs}`)
   }
@@ -511,6 +535,18 @@ app.post('/admin/classes/:id/lock', async (req, res) => {
   res.redirect(`/admin/classes/${id}`)
 })
 
+app.post('/admin/classes/:id/delete', async (req, res) => {
+  if (!usePg) return res.redirect('/admin/classes')
+  const id = parseInt(req.params.id, 10)
+  const cls = await pool.query('SELECT locked FROM classes WHERE id=$1', [id])
+  if (cls.rowCount === 0) return res.redirect('/admin/classes')
+  if (cls.rows[0].locked) {
+    return res.redirect(`/admin/classes/${id}`)
+  }
+  await pool.query('DELETE FROM classes WHERE id=$1', [id])
+  res.redirect('/admin/classes?deleted=1')
+})
+
 function slugifyName(name) {
   return name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '').slice(0, 12)
 }
@@ -575,10 +611,18 @@ app.post('/admin/exercises', async (req, res) => {
 app.post('/admin/exercises/:id/assign', async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
   const id = parseInt(req.params.id, 10)
-  const { class_id } = req.body
+  const { class_id, due_at } = req.body
   if (!class_id) return res.redirect('/admin/exercises')
-  await pool.query('INSERT INTO assignments (class_id, exercise_id) VALUES ($1, $2)', [parseInt(class_id, 10), id])
+  const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
+  await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1, $2, $3)', [parseInt(class_id, 10), id, dueAtStr])
   res.redirect('/admin/exercises')
+})
+
+app.post('/admin/exercises/:id/delete', async (req, res) => {
+  if (!usePg) return res.redirect('/admin/exercises')
+  const id = parseInt(req.params.id, 10)
+  await pool.query('DELETE FROM exercises WHERE id=$1', [id])
+  res.redirect('/admin/exercises?deleted=1')
 })
 
 app.get('/admin/exercises/assigned', async (req, res) => {
@@ -595,7 +639,7 @@ app.post('/admin/exercises/assigned/:id/delete', async (req, res) => {
 })
 
 app.get('/admin/progress', async (req, res) => {
-  if (!usePg) return res.render('admin_progress', { rows: [] })
+  if (!usePg) return res.render('admin_progress', { rows: [], leaders: [], weeklyRows: [], weekStart: null, weekEnd: null, rangeRows: [], rangeStart: null, rangeEnd: null, surveyRows: [], surveyWeekStart: null, classes: [] })
   const rowsQ = await pool.query(`
     SELECT s.id, s.name, s.username, c.name AS class_name,
            COALESCE(COUNT(sub.*),0)::int AS total,
@@ -610,8 +654,177 @@ app.get('/admin/progress', async (req, res) => {
     ORDER BY c.name ASC NULLS LAST, s.id DESC
   `)
   const rows = rowsQ.rows
+  const classesQ = await pool.query('SELECT id, name FROM classes ORDER BY name ASC')
+  const classes = classesQ.rows
   const leaders = rows.slice().sort((a,b) => (b.streak - a.streak) || (b.stars - a.stars)).slice(0, 10)
-  res.render('admin_progress', { rows, leaders })
+  const weekly = String(req.query.weekly || '') === '1'
+  let weeklyRows = []
+  let weekStart = null
+  let weekEnd = null
+  if (weekly) {
+    const ws = (req.query.week_start || '').trim()
+    const d = ws ? new Date(ws) : new Date()
+    const day = d.getUTCDay()
+    const diff = (day + 6) % 7
+    const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+    monday.setUTCDate(monday.getUTCDate() - diff)
+    const wsStr = ws ? ws : `${monday.getUTCFullYear()}-${String(monday.getUTCMonth()+1).padStart(2,'0')}-${String(monday.getUTCDate()).padStart(2,'0')}`
+    const weeklyQ = await pool.query(`
+      WITH week AS (
+        SELECT $1::date AS week_start, ($1::date + INTERVAL '7 days') AS week_end
+      ),
+      classes AS (
+        SELECT c.id, c.name FROM classes c
+      ),
+      stu AS (
+        SELECT s.id, s.class_id FROM students s
+      ),
+      active AS (
+        SELECT st.class_id, COUNT(DISTINCT st.id)::int AS active_students
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN week w ON true
+        WHERE sub.submitted_at >= w.week_start AND sub.submitted_at < w.week_end
+        GROUP BY st.class_id
+      ),
+      weekly_assign AS (
+        SELECT a.id, a.exercise_id, a.class_id, a.due_at
+        FROM assignments a
+        JOIN week w ON true
+        WHERE a.assigned_at >= w.week_start AND a.assigned_at < w.week_end
+      ),
+      first_subs AS (
+        SELECT st.class_id, sub.student_id, sub.exercise_id, MIN(sub.submitted_at) AS first_submitted
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN weekly_assign wa ON wa.exercise_id=sub.exercise_id AND wa.class_id=st.class_id
+        JOIN week w ON true
+        WHERE sub.submitted_at < w.week_end
+        GROUP BY st.class_id, sub.student_id, sub.exercise_id
+      ),
+      completed AS (
+        SELECT class_id, COUNT(DISTINCT student_id)::int AS completed_students FROM first_subs GROUP BY class_id
+      ),
+      on_time AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS on_time_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted <= wa.due_at
+        GROUP BY fs.class_id
+      ),
+      late AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS late_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted > wa.due_at
+        GROUP BY fs.class_id
+      )
+      SELECT c.id AS class_id, c.name AS class_name,
+             (SELECT COUNT(*)::int FROM students s WHERE s.class_id=c.id) AS total_students,
+             COALESCE(a.active_students,0)::int AS active_students,
+             COALESCE(co.completed_students,0)::int AS completed_students,
+             COALESCE(ot.on_time_students,0)::int AS on_time_students,
+             COALESCE(lt.late_students,0)::int AS late_students,
+             COALESCE(sv.surveyed_students,0)::int AS surveyed_students,
+             COALESCE(sv.self_disciplined,0)::int AS survey_self_disciplined,
+             COALESCE(sv.not_self_disciplined,0)::int AS survey_not_self_disciplined,
+             sv.late_rate_pct::int AS survey_late_rate_pct
+      FROM classes c
+      LEFT JOIN active a ON a.class_id=c.id
+      LEFT JOIN completed co ON co.class_id=c.id
+      LEFT JOIN on_time ot ON ot.class_id=c.id
+      LEFT JOIN late lt ON lt.class_id=c.id
+      LEFT JOIN surveys sv ON sv.class_id=c.id AND sv.week_start=$1
+      ORDER BY c.name ASC
+    `, [wsStr])
+    weeklyRows = weeklyQ.rows
+    weekStart = wsStr
+    const d2 = new Date(wsStr)
+    const end = new Date(Date.UTC(d2.getUTCFullYear(), d2.getUTCMonth(), d2.getUTCDate()))
+    end.setUTCDate(end.getUTCDate() + 7)
+    weekEnd = `${end.getUTCFullYear()}-${String(end.getUTCMonth()+1).padStart(2,'0')}-${String(end.getUTCDate()).padStart(2,'0')}`
+  }
+  const range = String(req.query.range || '') === '1'
+  let rangeRows = []
+  let rangeStart = null
+  let rangeEnd = null
+  if (range) {
+    const rs = (req.query.start_date || '').trim()
+    const ds = req.query.days ? parseInt(req.query.days, 10) : null
+    let re = (req.query.end_date || '').trim()
+    if (rs && ds && ds > 0) re = addDaysYMD(rs, ds)
+    if (rs && re) {
+      const rangeQ = await pool.query(`
+        WITH r AS (
+          SELECT $1::date AS start_date, $2::date AS end_date
+        ),
+        classes AS (
+          SELECT c.id, c.name FROM classes c
+        ),
+        stu AS (
+          SELECT s.id, s.class_id FROM students s
+        ),
+        active AS (
+          SELECT st.class_id, COUNT(DISTINCT st.id)::int AS active_students
+          FROM submissions sub
+          JOIN stu st ON st.id=sub.student_id
+          JOIN r ON true
+          WHERE sub.submitted_at >= r.start_date AND sub.submitted_at < r.end_date
+          GROUP BY st.class_id
+        ),
+        range_assign AS (
+          SELECT a.id, a.exercise_id, a.class_id, a.due_at
+          FROM assignments a
+          JOIN r ON true
+          WHERE a.assigned_at >= r.start_date AND a.assigned_at < r.end_date
+        ),
+        first_subs AS (
+          SELECT st.class_id, sub.student_id, sub.exercise_id, MIN(sub.submitted_at) AS first_submitted
+          FROM submissions sub
+          JOIN stu st ON st.id=sub.student_id
+          JOIN range_assign ra ON ra.exercise_id=sub.exercise_id AND ra.class_id=st.class_id
+          JOIN r ON true
+          WHERE sub.submitted_at < r.end_date
+          GROUP BY st.class_id, sub.student_id, sub.exercise_id
+        ),
+        completed AS (
+          SELECT class_id, COUNT(DISTINCT student_id)::int AS completed_students FROM first_subs GROUP BY class_id
+        ),
+        on_time AS (
+          SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS on_time_students
+          FROM first_subs fs JOIN range_assign ra ON ra.exercise_id=fs.exercise_id AND ra.class_id=fs.class_id
+          WHERE ra.due_at IS NOT NULL AND fs.first_submitted <= ra.due_at
+          GROUP BY fs.class_id
+        ),
+        late AS (
+          SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS late_students
+          FROM first_subs fs JOIN range_assign ra ON ra.exercise_id=fs.exercise_id AND ra.class_id=fs.class_id
+          WHERE ra.due_at IS NOT NULL AND fs.first_submitted > ra.due_at
+          GROUP BY fs.class_id
+        )
+        SELECT c.id AS class_id, c.name AS class_name,
+               (SELECT COUNT(*)::int FROM students s WHERE s.class_id=c.id) AS total_students,
+               COALESCE(a.active_students,0)::int AS active_students,
+               COALESCE(co.completed_students,0)::int AS completed_students,
+               COALESCE(ot.on_time_students,0)::int AS on_time_students,
+               COALESCE(lt.late_students,0)::int AS late_students
+        FROM classes c
+        LEFT JOIN active a ON a.class_id=c.id
+        LEFT JOIN completed co ON co.class_id=c.id
+        LEFT JOIN on_time ot ON ot.class_id=c.id
+        LEFT JOIN late lt ON lt.class_id=c.id
+        ORDER BY c.name ASC
+      `, [rs, re])
+      rangeRows = rangeQ.rows
+      rangeStart = rs
+      rangeEnd = re
+    }
+  }
+  const surveyWeekStart = (req.query.survey_week || '').trim() || null
+  let surveyRows = []
+  if (surveyWeekStart) {
+    const sQ = await pool.query('SELECT s.*, c.name AS class_name FROM surveys s JOIN classes c ON c.id=s.class_id WHERE s.week_start=$1 ORDER BY c.name ASC', [surveyWeekStart])
+    surveyRows = sQ.rows
+  }
+  res.render('admin_progress', { rows, leaders, weeklyRows, weekStart, weekEnd, rangeRows, rangeStart, rangeEnd, surveyRows, surveyWeekStart, classes })
 })
 
 app.get('/admin/progress/export/csv', async (req, res) => {
@@ -675,6 +888,451 @@ app.get('/admin/progress/export/pdf', async (req, res) => {
     const r = rows[i]
     const acc = r.total ? Math.round((r.correct / r.total) * 100) : 0
     doc.text(`${r.class_name||'-'} · ${r.name||'-'} (${r.username||'-'}) · Nộp: ${r.total||0} · Đúng: ${r.correct||0} · ${acc}% · ⭐ ${r.stars||0} · Chuỗi: ${r.streak||0}`)
+  }
+  doc.end()
+})
+
+app.get('/admin/progress/export/weekly/csv', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const ws = (req.query.week_start || '').trim()
+  if (!ws) return res.status(400).send('Missing week_start')
+  const weeklyQ = await pool.query(`
+      WITH week AS (
+        SELECT $1::date AS week_start, ($1::date + INTERVAL '7 days') AS week_end
+      ),
+      classes AS (
+        SELECT c.id, c.name FROM classes c
+      ),
+      stu AS (
+        SELECT s.id, s.class_id FROM students s
+      ),
+      active AS (
+        SELECT st.class_id, COUNT(DISTINCT st.id)::int AS active_students
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN week w ON true
+        WHERE sub.submitted_at >= w.week_start AND sub.submitted_at < w.week_end
+        GROUP BY st.class_id
+      ),
+      weekly_assign AS (
+        SELECT a.id, a.exercise_id, a.class_id, a.due_at
+        FROM assignments a
+        JOIN week w ON true
+        WHERE a.assigned_at >= w.week_start AND a.assigned_at < w.week_end
+      ),
+      first_subs AS (
+        SELECT st.class_id, sub.student_id, sub.exercise_id, MIN(sub.submitted_at) AS first_submitted
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN weekly_assign wa ON wa.exercise_id=sub.exercise_id AND wa.class_id=st.class_id
+        JOIN week w ON true
+        WHERE sub.submitted_at < w.week_end
+        GROUP BY st.class_id, sub.student_id, sub.exercise_id
+      ),
+      completed AS (
+        SELECT class_id, COUNT(DISTINCT student_id)::int AS completed_students FROM first_subs GROUP BY class_id
+      ),
+      on_time AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS on_time_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted <= wa.due_at
+        GROUP BY fs.class_id
+      ),
+      late AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS late_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted > wa.due_at
+        GROUP BY fs.class_id
+      )
+      SELECT c.id AS class_id, c.name AS class_name,
+             (SELECT COUNT(*)::int FROM students s WHERE s.class_id=c.id) AS total_students,
+             COALESCE(a.active_students,0)::int AS active_students,
+             COALESCE(co.completed_students,0)::int AS completed_students,
+             COALESCE(ot.on_time_students,0)::int AS on_time_students,
+             COALESCE(lt.late_students,0)::int AS late_students,
+             COALESCE(sv.surveyed_students,0)::int AS surveyed_students,
+             COALESCE(sv.self_disciplined,0)::int AS survey_self_disciplined,
+             COALESCE(sv.not_self_disciplined,0)::int AS survey_not_self_disciplined,
+             sv.late_rate_pct::int AS survey_late_rate_pct
+      FROM classes c
+      LEFT JOIN active a ON a.class_id=c.id
+      LEFT JOIN completed co ON co.class_id=c.id
+      LEFT JOIN on_time ot ON ot.class_id=c.id
+      LEFT JOIN late lt ON lt.class_id=c.id
+      LEFT JOIN surveys sv ON sv.class_id=c.id AND sv.week_start=$1
+      ORDER BY c.name ASC
+    `, [ws])
+  const rows = weeklyQ.rows
+  const header = ['Tuần bắt đầu','Lớp','Tổng HS','Tự giác','Tự giác %','Hoàn thành','Hoàn thành %','Đúng hạn','Đúng hạn %','Muộn','Muộn %','Khảo sát','Tự giác (khảo sát)','Chưa tự giác','Làm muộn % (khảo sát)']
+  const lines = [header.join(',')]
+  for (const r of rows) {
+    const total = r.total_students || 0
+    const pct = (n) => total ? Math.round((n * 100) / total) : 0
+    lines.push([
+      ws,
+      r.class_name||'',
+      total,
+      r.active_students||0,
+      `${pct(r.active_students||0)}%`,
+      r.completed_students||0,
+      `${pct(r.completed_students||0)}%`,
+      r.on_time_students||0,
+      `${pct(r.on_time_students||0)}%`,
+      r.late_students||0,
+      `${pct(r.late_students||0)}%`
+      , r.surveyed_students||0
+      , r.survey_self_disciplined||0
+      , r.survey_not_self_disciplined||0
+      , r.survey_late_rate_pct!=null ? `${r.survey_late_rate_pct}%` : ''
+    ].map(x => String(x).replace(/,/g,';')).join(','))
+  }
+  const csv = lines.join('\n')
+  const bom = '\uFEFF'
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="kpi_tuan_${ws}.csv"`)
+  res.send(bom + csv)
+})
+
+app.get('/admin/progress/export/weekly/pdf', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const ws = (req.query.week_start || '').trim()
+  if (!ws) return res.status(400).send('Missing week_start')
+  const weeklyQ = await pool.query(`
+      WITH week AS (
+        SELECT $1::date AS week_start, ($1::date + INTERVAL '7 days') AS week_end
+      ),
+      classes AS (
+        SELECT c.id, c.name FROM classes c
+      ),
+      stu AS (
+        SELECT s.id, s.class_id FROM students s
+      ),
+      active AS (
+        SELECT st.class_id, COUNT(DISTINCT st.id)::int AS active_students
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN week w ON true
+        WHERE sub.submitted_at >= w.week_start AND sub.submitted_at < w.week_end
+        GROUP BY st.class_id
+      ),
+      weekly_assign AS (
+        SELECT a.id, a.exercise_id, a.class_id, a.due_at
+        FROM assignments a
+        JOIN week w ON true
+        WHERE a.assigned_at >= w.week_start AND a.assigned_at < w.week_end
+      ),
+      first_subs AS (
+        SELECT st.class_id, sub.student_id, sub.exercise_id, MIN(sub.submitted_at) AS first_submitted
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN weekly_assign wa ON wa.exercise_id=sub.exercise_id AND wa.class_id=st.class_id
+        JOIN week w ON true
+        WHERE sub.submitted_at < w.week_end
+        GROUP BY st.class_id, sub.student_id, sub.exercise_id
+      ),
+      completed AS (
+        SELECT class_id, COUNT(DISTINCT student_id)::int AS completed_students FROM first_subs GROUP BY class_id
+      ),
+      on_time AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS on_time_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted <= wa.due_at
+        GROUP BY fs.class_id
+      ),
+      late AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS late_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted > wa.due_at
+        GROUP BY fs.class_id
+      )
+      SELECT c.id AS class_id, c.name AS class_name,
+             (SELECT COUNT(*)::int FROM students s WHERE s.class_id=c.id) AS total_students,
+             COALESCE(a.active_students,0)::int AS active_students,
+             COALESCE(co.completed_students,0)::int AS completed_students,
+             COALESCE(ot.on_time_students,0)::int AS on_time_students,
+             COALESCE(lt.late_students,0)::int AS late_students,
+             COALESCE(sv.surveyed_students,0)::int AS surveyed_students,
+             COALESCE(sv.self_disciplined,0)::int AS survey_self_disciplined,
+             COALESCE(sv.not_self_disciplined,0)::int AS survey_not_self_disciplined,
+             sv.late_rate_pct::int AS survey_late_rate_pct
+      FROM classes c
+      LEFT JOIN active a ON a.class_id=c.id
+      LEFT JOIN completed co ON co.class_id=c.id
+      LEFT JOIN on_time ot ON ot.class_id=c.id
+      LEFT JOIN late lt ON lt.class_id=c.id
+      LEFT JOIN surveys sv ON sv.class_id=c.id AND sv.week_start=$1
+      ORDER BY c.name ASC
+    `, [ws])
+  const rows = weeklyQ.rows
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `attachment; filename="kpi_tuan_${ws}.pdf"`)
+  const doc = new PDFDocument({ margin: 40 })
+  doc.pipe(res)
+  const fp = resolvePdfFont()
+  if (fp) {
+    try { doc.font(fp) } catch {}
+  }
+  doc.fontSize(18).text(`Báo cáo KPI tuần (${ws} → ${new Date(new Date(ws).getTime()+7*86400000).toISOString().slice(0,10)})`, { align: 'center' })
+  doc.moveDown()
+  doc.fontSize(12)
+  const max = Math.min(rows.length, 50)
+  for (let i = 0; i < max; i++) {
+    const r = rows[i]
+    const total = r.total_students || 0
+    const pct = (n) => total ? Math.round((n * 100) / total) : 0
+    const surveyPart = (r.surveyed_students||0) ? ` · Khảo sát: ${r.surveyed_students||0} · Tự giác(khảo sát): ${r.survey_self_disciplined||0} · Chưa tự giác: ${r.survey_not_self_disciplined||0} · Làm muộn(khảo sát): ${r.survey_late_rate_pct!=null ? r.survey_late_rate_pct+'%' : '-'}` : ''
+    doc.text(`${r.class_name||'-'} · Tổng: ${total} · Tự giác: ${r.active_students||0} (${pct(r.active_students||0)}%) · Hoàn thành: ${r.completed_students||0} (${pct(r.completed_students||0)}%) · Đúng hạn: ${r.on_time_students||0} (${pct(r.on_time_students||0)}%) · Muộn: ${r.late_students||0} (${pct(r.late_students||0)}%)${surveyPart}`)
+  }
+  doc.end()
+})
+
+app.post('/admin/surveys', async (req, res) => {
+  if (!usePg) return res.redirect('/admin/progress')
+  const { class_id, week_start, surveyed_students, self_disciplined, not_self_disciplined, late_rate_pct } = req.body
+  if (!class_id || !week_start) return res.redirect('/admin/progress')
+  await pool.query(
+    `INSERT INTO surveys (class_id, week_start, surveyed_students, self_disciplined, not_self_disciplined, late_rate_pct)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (class_id, week_start) DO UPDATE SET
+       surveyed_students=EXCLUDED.surveyed_students,
+       self_disciplined=EXCLUDED.self_disciplined,
+       not_self_disciplined=EXCLUDED.not_self_disciplined,
+       late_rate_pct=EXCLUDED.late_rate_pct`,
+    [parseInt(class_id, 10), week_start, surveyed_students ? parseInt(surveyed_students, 10) : 0, self_disciplined ? parseInt(self_disciplined, 10) : 0, not_self_disciplined ? parseInt(not_self_disciplined, 10) : 0, late_rate_pct ? parseInt(late_rate_pct, 10) : null]
+  )
+  res.redirect(`/admin/progress?survey_week=${encodeURIComponent(week_start)}`)
+})
+
+app.get('/admin/surveys/export/csv', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const ws = (req.query.week_start || '').trim()
+  const rows = ws
+    ? (await pool.query('SELECT s.*, c.name AS class_name FROM surveys s JOIN classes c ON c.id=s.class_id WHERE s.week_start=$1 ORDER BY c.name ASC', [ws])).rows
+    : (await pool.query('SELECT s.*, c.name AS class_name FROM surveys s JOIN classes c ON c.id=s.class_id ORDER BY s.week_start DESC, c.name ASC')).rows
+  const header = ['Tuần','Lớp','Khảo sát','Tự giác','Chưa tự giác','Làm muộn %']
+  const lines = [header.join(',')]
+  for (const r of rows) {
+    lines.push([
+      r.week_start,
+      r.class_name||'',
+      r.surveyed_students||0,
+      r.self_disciplined||0,
+      r.not_self_disciplined||0,
+      r.late_rate_pct!=null ? `${r.late_rate_pct}%` : ''
+    ].map(x => String(x).replace(/,/g,';')).join(','))
+  }
+  const csv = lines.join('\n')
+  const bom = '\uFEFF'
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="khao_sat${ws?('_'+ws):''}.csv"`)
+  res.send(bom + csv)
+})
+
+app.get('/admin/surveys/export/pdf', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const ws = (req.query.week_start || '').trim()
+  const rows = ws
+    ? (await pool.query('SELECT s.*, c.name AS class_name FROM surveys s JOIN classes c ON c.id=s.class_id WHERE s.week_start=$1 ORDER BY c.name ASC', [ws])).rows
+    : (await pool.query('SELECT s.*, c.name AS class_name FROM surveys s JOIN classes c ON c.id=s.class_id ORDER BY s.week_start DESC, c.name ASC')).rows
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `attachment; filename="khao_sat${ws?('_'+ws):''}.pdf"`)
+  const doc = new PDFDocument({ margin: 40 })
+  doc.pipe(res)
+  const fp = resolvePdfFont()
+  if (fp) { try { doc.font(fp) } catch {} }
+  doc.fontSize(18).text(ws ? `Khảo sát tuần ${ws}` : 'Khảo sát tổng hợp', { align: 'center' })
+  doc.moveDown()
+  doc.fontSize(12)
+  const max = Math.min(rows.length, 100)
+  for (let i = 0; i < max; i++) {
+    const r = rows[i]
+    const late = r.late_rate_pct!=null ? `${r.late_rate_pct}%` : '-'
+    doc.text(`${r.class_name||'-'} · Khảo sát: ${r.surveyed_students||0} · Tự giác: ${r.self_disciplined||0} · Chưa tự giác: ${r.not_self_disciplined||0} · Làm muộn: ${late}`)
+  }
+  doc.end()
+})
+
+app.get('/admin/progress/export/range/csv', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const rs = (req.query.start_date || '').trim()
+  const ds = req.query.days ? parseInt(req.query.days, 10) : null
+  let re = (req.query.end_date || '').trim()
+  if (rs && ds && ds > 0) re = addDaysYMD(rs, ds)
+  if (!rs || !re) return res.status(400).send('Missing start_date or end_date/days')
+  const q = `
+      WITH r AS (
+        SELECT $1::date AS start_date, $2::date AS end_date
+      ),
+      classes AS (
+        SELECT c.id, c.name FROM classes c
+      ),
+      stu AS (
+        SELECT s.id, s.class_id FROM students s
+      ),
+      active AS (
+        SELECT st.class_id, COUNT(DISTINCT st.id)::int AS active_students
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN r ON true
+        WHERE sub.submitted_at >= r.start_date AND sub.submitted_at < r.end_date
+        GROUP BY st.class_id
+      ),
+      range_assign AS (
+        SELECT a.id, a.exercise_id, a.class_id, a.due_at
+        FROM assignments a
+        JOIN r ON true
+        WHERE a.assigned_at >= r.start_date AND a.assigned_at < r.end_date
+      ),
+      first_subs AS (
+        SELECT st.class_id, sub.student_id, sub.exercise_id, MIN(sub.submitted_at) AS first_submitted
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN range_assign ra ON ra.exercise_id=sub.exercise_id AND ra.class_id=st.class_id
+        JOIN r ON true
+        WHERE sub.submitted_at < r.end_date
+        GROUP BY st.class_id, sub.student_id, sub.exercise_id
+      ),
+      completed AS (
+        SELECT class_id, COUNT(DISTINCT student_id)::int AS completed_students FROM first_subs GROUP BY class_id
+      ),
+      on_time AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS on_time_students
+        FROM first_subs fs JOIN range_assign ra ON ra.exercise_id=fs.exercise_id AND ra.class_id=fs.class_id
+        WHERE ra.due_at IS NOT NULL AND fs.first_submitted <= ra.due_at
+        GROUP BY fs.class_id
+      ),
+      late AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS late_students
+        FROM first_subs fs JOIN range_assign ra ON ra.exercise_id=fs.exercise_id AND ra.class_id=fs.class_id
+        WHERE ra.due_at IS NOT NULL AND fs.first_submitted > ra.due_at
+        GROUP BY fs.class_id
+      )
+      SELECT c.id AS class_id, c.name AS class_name,
+             (SELECT COUNT(*)::int FROM students s WHERE s.class_id=c.id) AS total_students,
+             COALESCE(a.active_students,0)::int AS active_students,
+             COALESCE(co.completed_students,0)::int AS completed_students,
+             COALESCE(ot.on_time_students,0)::int AS on_time_students,
+             COALESCE(lt.late_students,0)::int AS late_students
+      FROM classes c
+      LEFT JOIN active a ON a.class_id=c.id
+      LEFT JOIN completed co ON co.class_id=c.id
+      LEFT JOIN on_time ot ON ot.class_id=c.id
+      LEFT JOIN late lt ON lt.class_id=c.id
+      ORDER BY c.name ASC
+    `
+  const rows = (await pool.query(q, [rs, re])).rows
+  const header = ['Khoảng','Lớp','Tổng HS','Tự giác','Tự giác %','Hoàn thành','Hoàn thành %','Đúng hạn','Đúng hạn %','Muộn','Muộn %']
+  const lines = [header.join(',')]
+  for (const r of rows) {
+    const total = r.total_students || 0
+    const pct = (n) => total ? Math.round((n * 100) / total) : 0
+    lines.push([
+      `${rs} → ${re}`,
+      r.class_name||'',
+      total,
+      r.active_students||0,
+      `${pct(r.active_students||0)}%`,
+      r.completed_students||0,
+      `${pct(r.completed_students||0)}%`,
+      r.on_time_students||0,
+      `${pct(r.on_time_students||0)}%`,
+      r.late_students||0,
+      `${pct(r.late_students||0)}%`
+    ].map(x => String(x).replace(/,/g,';')).join(','))
+  }
+  const csv = lines.join('\n')
+  const bom = '\uFEFF'
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="kpi_khoang_${rs}_${re}.csv"`)
+  res.send(bom + csv)
+})
+
+app.get('/admin/progress/export/range/pdf', async (req, res) => {
+  if (!usePg) return res.status(400).send('No DB')
+  const rs = (req.query.start_date || '').trim()
+  const ds = req.query.days ? parseInt(req.query.days, 10) : null
+  let re = (req.query.end_date || '').trim()
+  if (rs && ds && ds > 0) re = addDaysYMD(rs, ds)
+  if (!rs || !re) return res.status(400).send('Missing start_date or end_date/days')
+  const q = `
+      WITH r AS (
+        SELECT $1::date AS start_date, $2::date AS end_date
+      ),
+      classes AS (
+        SELECT c.id, c.name FROM classes c
+      ),
+      stu AS (
+        SELECT s.id, s.class_id FROM students s
+      ),
+      active AS (
+        SELECT st.class_id, COUNT(DISTINCT st.id)::int AS active_students
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN r ON true
+        WHERE sub.submitted_at >= r.start_date AND sub.submitted_at < r.end_date
+        GROUP BY st.class_id
+      ),
+      range_assign AS (
+        SELECT a.id, a.exercise_id, a.class_id, a.due_at
+        FROM assignments a
+        JOIN r ON true
+        WHERE a.assigned_at >= r.start_date AND a.assigned_at < r.end_date
+      ),
+      first_subs AS (
+        SELECT st.class_id, sub.student_id, sub.exercise_id, MIN(sub.submitted_at) AS first_submitted
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN range_assign ra ON ra.exercise_id=sub.exercise_id AND ra.class_id=st.class_id
+        JOIN r ON true
+        WHERE sub.submitted_at < r.end_date
+        GROUP BY st.class_id, sub.student_id, sub.exercise_id
+      ),
+      completed AS (
+        SELECT class_id, COUNT(DISTINCT student_id)::int AS completed_students FROM first_subs GROUP BY class_id
+      ),
+      on_time AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS on_time_students
+        FROM first_subs fs JOIN range_assign ra ON ra.exercise_id=fs.exercise_id AND ra.class_id=fs.class_id
+        WHERE ra.due_at IS NOT NULL AND fs.first_submitted <= ra.due_at
+        GROUP BY fs.class_id
+      ),
+      late AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS late_students
+        FROM first_subs fs JOIN range_assign ra ON ra.exercise_id=fs.exercise_id AND ra.class_id=fs.class_id
+        WHERE ra.due_at IS NOT NULL AND fs.first_submitted > ra.due_at
+        GROUP BY fs.class_id
+      )
+      SELECT c.id AS class_id, c.name AS class_name,
+             (SELECT COUNT(*)::int FROM students s WHERE s.class_id=c.id) AS total_students,
+             COALESCE(a.active_students,0)::int AS active_students,
+             COALESCE(co.completed_students,0)::int AS completed_students,
+             COALESCE(ot.on_time_students,0)::int AS on_time_students,
+             COALESCE(lt.late_students,0)::int AS late_students
+      FROM classes c
+      LEFT JOIN active a ON a.class_id=c.id
+      LEFT JOIN completed co ON co.class_id=c.id
+      LEFT JOIN on_time ot ON ot.class_id=c.id
+      LEFT JOIN late lt ON lt.class_id=c.id
+      ORDER BY c.name ASC
+    `
+  const rows = (await pool.query(q, [rs, re])).rows
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `attachment; filename="kpi_khoang_${rs}_${re}.pdf"`)
+  const doc = new PDFDocument({ margin: 40 })
+  doc.pipe(res)
+  const fp = resolvePdfFont()
+  if (fp) {
+    try { doc.font(fp) } catch {}
+  }
+  doc.fontSize(18).text(`Báo cáo KPI theo khoảng (${rs} → ${re})`, { align: 'center' })
+  doc.moveDown()
+  doc.fontSize(12)
+  const max = Math.min(rows.length, 50)
+  for (let i = 0; i < max; i++) {
+    const r = rows[i]
+    const total = r.total_students || 0
+    const pct = (n) => total ? Math.round((n * 100) / total) : 0
+    doc.text(`${r.class_name||'-'} · Tổng: ${total} · Tự giác: ${r.active_students||0} (${pct(r.active_students||0)}%) · Hoàn thành: ${r.completed_students||0} (${pct(r.completed_students||0)}%) · Đúng hạn: ${r.on_time_students||0} (${pct(r.on_time_students||0)}%) · Muộn: ${r.late_students||0} (${pct(r.late_students||0)}%)`)
   }
   doc.end()
 })
@@ -830,3 +1488,120 @@ app.post('/admin/submissions/:id/nudge', async (req, res) => {
   }
   res.redirect(`/admin/exercises/${row.exercise_id}/submissions`)
 })
+
+function formatDateYMD(d) {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`
+}
+
+function addDaysYMD(startStr, days) {
+  const d = new Date(startStr)
+  const base = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+  const end = new Date(base.getTime() + (days || 0) * 86400000)
+  return formatDateYMD(end)
+}
+
+function resolvePreviousWeekStart() {
+  const now = new Date()
+  const day = now.getUTCDay()
+  const diff = (day + 6) % 7
+  const mondayThis = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  mondayThis.setUTCDate(mondayThis.getUTCDate() - diff)
+  const mondayPrev = new Date(mondayThis)
+  mondayPrev.setUTCDate(mondayPrev.getUTCDate() - 7)
+  return formatDateYMD(mondayPrev)
+}
+
+async function computeWeeklyStats(weekStart) {
+  if (!usePg) return
+  const q = `
+      WITH week AS (
+        SELECT $1::date AS week_start, ($1::date + INTERVAL '7 days') AS week_end
+      ),
+      classes AS (
+        SELECT c.id, c.name FROM classes c
+      ),
+      stu AS (
+        SELECT s.id, s.class_id FROM students s
+      ),
+      active AS (
+        SELECT st.class_id, COUNT(DISTINCT st.id)::int AS active_students
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN week w ON true
+        WHERE sub.submitted_at >= w.week_start AND sub.submitted_at < w.week_end
+        GROUP BY st.class_id
+      ),
+      weekly_assign AS (
+        SELECT a.id, a.exercise_id, a.class_id, a.due_at
+        FROM assignments a
+        JOIN week w ON true
+        WHERE a.assigned_at >= w.week_start AND a.assigned_at < w.week_end
+      ),
+      first_subs AS (
+        SELECT st.class_id, sub.student_id, sub.exercise_id, MIN(sub.submitted_at) AS first_submitted
+        FROM submissions sub
+        JOIN stu st ON st.id=sub.student_id
+        JOIN weekly_assign wa ON wa.exercise_id=sub.exercise_id AND wa.class_id=st.class_id
+        JOIN week w ON true
+        WHERE sub.submitted_at < w.week_end
+        GROUP BY st.class_id, sub.student_id, sub.exercise_id
+      ),
+      completed AS (
+        SELECT class_id, COUNT(DISTINCT student_id)::int AS completed_students FROM first_subs GROUP BY class_id
+      ),
+      on_time AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS on_time_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted <= wa.due_at
+        GROUP BY fs.class_id
+      ),
+      late AS (
+        SELECT fs.class_id, COUNT(DISTINCT fs.student_id)::int AS late_students
+        FROM first_subs fs JOIN weekly_assign wa ON wa.exercise_id=fs.exercise_id AND wa.class_id=fs.class_id
+        WHERE wa.due_at IS NOT NULL AND fs.first_submitted > wa.due_at
+        GROUP BY fs.class_id
+      )
+      SELECT c.id AS class_id, c.name AS class_name,
+             (SELECT COUNT(*)::int FROM students s WHERE s.class_id=c.id) AS total_students,
+             COALESCE(a.active_students,0)::int AS active_students,
+             COALESCE(co.completed_students,0)::int AS completed_students,
+             COALESCE(ot.on_time_students,0)::int AS on_time_students,
+             COALESCE(lt.late_students,0)::int AS late_students
+      FROM classes c
+      LEFT JOIN active a ON a.class_id=c.id
+      LEFT JOIN completed co ON co.class_id=c.id
+      LEFT JOIN on_time ot ON ot.class_id=c.id
+      LEFT JOIN late lt ON lt.class_id=c.id
+      ORDER BY c.name ASC
+    `
+  const rows = (await pool.query(q, [weekStart])).rows
+  for (const r of rows) {
+    await pool.query(
+      `INSERT INTO weekly_stats (week_start, class_id, total_students, active_students, completed_students, on_time_students, late_students)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (class_id, week_start) DO UPDATE SET
+         total_students=EXCLUDED.total_students,
+         active_students=EXCLUDED.active_students,
+         completed_students=EXCLUDED.completed_students,
+         on_time_students=EXCLUDED.on_time_students,
+         late_students=EXCLUDED.late_students`,
+      [weekStart, r.class_id, r.total_students||0, r.active_students||0, r.completed_students||0, r.on_time_students||0, r.late_students||0]
+    )
+  }
+}
+
+async function ensureWeeklyAggregationJob() {
+  if (!usePg) return
+  const run = async () => {
+    const ws = resolvePreviousWeekStart()
+    const tot = await pool.query('SELECT COUNT(*)::int AS cnt FROM classes')
+    const have = await pool.query('SELECT COUNT(*)::int AS cnt FROM weekly_stats WHERE week_start=$1', [ws])
+    const total = tot.rows[0]?.cnt || 0
+    const haveCnt = have.rows[0]?.cnt || 0
+    if (haveCnt < total) {
+      await computeWeeklyStats(ws)
+    }
+  }
+  run().catch(() => {})
+  setInterval(() => { run().catch(() => {}) }, 6 * 60 * 60 * 1000)
+}

@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="/">NudgeMath</a>
+    <a class="brand" href="/"><img class="logo" src="/logo.svg" alt="">NudgeMath</a>
     <nav class="nav">
       <a href="/admin">Trang Quản Trị</a>
     </nav>
@@ -18,6 +18,9 @@
     <h1>Quản lý bài tập</h1>
     <% if (typeof ai !== 'undefined' && ai) { %>
       <div style="background:#e7ffe7;color:#0a0;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Đã tạo bài bằng Gemini thành công</div>
+    <% } %>
+    <% if (typeof deleted !== 'undefined' && deleted) { %>
+      <div style="background:#ffe8e8;color:#a00;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Đã xóa bài tập.</div>
     <% } %>
     <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
       <a class="btn btn-primary" href="/admin/exercises/new/manual">Tạo bài thủ công</a>
@@ -30,8 +33,10 @@
           <th>ID</th>
           <th>Tiêu đề</th>
           <th>Chế độ</th>
+          <th>Ngày tạo</th>
           <th>Giao cho lớp</th>
           <th>Học sinh nộp</th>
+          <th>Hành động</th>
         </tr>
       </thead>
       <tbody>
@@ -40,19 +45,38 @@
             <td><%= e.id %></td>
             <td><%= e.title %></td>
             <td><%= e.mode || 'thường' %></td>
+            <td><%= new Date(e.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
             <td>
               <form class="inline" method="POST" action="/admin/exercises/<%= e.id %>/assign">
-                <select class="input" name="class_id">
-                  <% (classes || []).forEach(c => { %>
-                    <option value="<%= c.id %>"><%= c.name %></option>
-                  <% }) %>
-                </select>
+                <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <select class="input" name="class_id">
+                    <% (classes || []).forEach(c => { %>
+                      <option value="<%= c.id %>"><%= c.name %></option>
+                    <% }) %>
+                  </select>
+                  <input class="input" type="datetime-local" name="due_at" placeholder="Ngày kết thúc (tùy chọn)" />
+                </div>
                 <button class="btn btn-outline" type="submit">Giao</button>
               </form>
+              <% const assigned = (assignments||[]).filter(a => a.exercise_id === e.id); %>
+              <% assigned.forEach(a => { %>
+                <div class="muted" style="margin-top:6px">
+                  <strong><%= a.class_name %></strong>
+                  <% if (a.due_at) { %> · Hết hạn: <%= new Date(a.due_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %><% } %>
+                  <form class="inline" method="POST" action="/admin/exercises/assigned/<%= a.id %>/delete" onsubmit="return confirm('Xóa giao bài này?')">
+                    <button class="btn btn-danger" type="submit">Xóa giao</button>
+                  </form>
+                </div>
+              <% }) %>
             </td>
-            <td>
-              <a href="/admin/exercises/<%= e.id %>/submissions">Xem nộp</a>
-            </td>
+          <td>
+            <a href="/admin/exercises/<%= e.id %>/submissions">Xem nộp</a>
+          </td>
+          <td>
+            <form class="inline" method="POST" action="/admin/exercises/<%= e.id %>/delete" onsubmit="return confirm('Xóa bài tập này? Toàn bộ giao bài và nộp sẽ bị xóa.')">
+              <button class="btn btn-danger" type="submit">Xóa bài tập</button>
+            </form>
+          </td>
           </tr>
         <% }) %>
       </tbody>

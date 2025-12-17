@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="/">NudgeMath</a>
+    <a class="brand" href="/"><img class="logo" src="/logo.svg" alt="">NudgeMath</a>
     <nav class="nav">
       <a href="/admin">Trang Quản Trị</a>
     </nav>
@@ -16,6 +16,7 @@
   <div class="container">
   <div class="card">
     <h1>Quản lý học sinh</h1>
+    <% const _selectedClassId = (typeof selectedClassId !== 'undefined' && selectedClassId != null) ? String(selectedClassId) : ''; %>
     <% if (createdUser && createdPass) { %>
       <div class="alert alert-info">Tạo học sinh thành công. Username: <strong><%= createdUser %></strong>, Mật khẩu: <strong><%= createdPass %></strong></div>
     <% } %>
@@ -29,6 +30,19 @@
       </select>
       <input class="input" type="text" name="password" placeholder="Mật khẩu (tùy chọn)" />
       <button class="btn btn-primary" type="submit">Thêm học sinh</button>
+    </form>
+
+    <form class="form" method="GET" action="/admin/students" style="grid-template-columns: 1fr auto auto; margin-top: 12px;">
+      <select class="input" name="class_id">
+        <option value="">Tất cả các lớp</option>
+        <% (classes || []).forEach(c => { %>
+          <option value="<%= c.id %>" <%= _selectedClassId===String(c.id)?'selected':'' %>><%= c.name %></option>
+        <% }) %>
+      </select>
+      <button class="btn btn-outline" type="submit">Lọc</button>
+      <% if (_selectedClassId) { %>
+        <a class="btn btn-outline" href="/admin/students">Bỏ lọc</a>
+      <% } %>
     </form>
 
     <table class="table">

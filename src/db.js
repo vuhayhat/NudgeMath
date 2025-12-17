@@ -93,6 +93,8 @@ export async function ensureSchema() {
       assigned_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    ALTER TABLE assignments ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ;
+
     CREATE TABLE IF NOT EXISTS submissions (
       id SERIAL PRIMARY KEY,
       student_id INT REFERENCES students(id) ON DELETE CASCADE,
@@ -154,5 +156,30 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       is_read BOOLEAN DEFAULT FALSE
     );
+
+    CREATE TABLE IF NOT EXISTS weekly_stats (
+      id SERIAL PRIMARY KEY,
+      week_start DATE NOT NULL,
+      class_id INT REFERENCES classes(id) ON DELETE CASCADE,
+      total_students INT DEFAULT 0,
+      active_students INT DEFAULT 0,
+      completed_students INT DEFAULT 0,
+      on_time_students INT DEFAULT 0,
+      late_students INT DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS weekly_stats_class_week_uq ON weekly_stats(class_id, week_start);
+
+    CREATE TABLE IF NOT EXISTS surveys (
+      id SERIAL PRIMARY KEY,
+      class_id INT REFERENCES classes(id) ON DELETE CASCADE,
+      week_start DATE NOT NULL,
+      surveyed_students INT DEFAULT 0,
+      self_disciplined INT DEFAULT 0,
+      not_self_disciplined INT DEFAULT 0,
+      late_rate_pct INT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS surveys_class_week_uq ON surveys(class_id, week_start);
   `)
 }

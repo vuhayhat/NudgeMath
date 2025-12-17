@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="/">NudgeMath</a>
+    <a class="brand" href="/"><img class="logo" src="/logo.svg" alt="">NudgeMath</a>
     <nav class="nav">
       <a href="/admin">Trang Quản Trị</a>
     </nav>
@@ -16,6 +16,144 @@
   <div class="container">
     <div class="card">
       <h1>Tiến độ học sinh</h1>
+      <form class="form" method="GET" action="/admin/progress" style="grid-template-columns: 1fr auto auto; gap: 12px; margin-bottom: 12px;">
+        <input class="input" type="date" name="week_start" value="<%= weekStart || '' %>" />
+        <input type="hidden" name="weekly" value="1" />
+        <button class="btn btn-outline" type="submit">Xem thống kê theo tuần</button>
+        <% if (weekStart) { %>
+          <a class="btn btn-outline" href="/admin/progress">Bỏ chế độ tuần</a>
+        <% } %>
+      </form>
+      <form class="form" method="GET" action="/admin/progress" style="grid-template-columns: 1fr auto auto; gap: 12px; margin-bottom: 12px;">
+        <input class="input" type="date" name="survey_week" value="<%= surveyWeekStart || '' %>" />
+        <button class="btn btn-outline" type="submit">Xem khảo sát tuần</button>
+        <% if (surveyWeekStart) { %>
+          <a class="btn btn-outline" href="/admin/progress">Bỏ chế độ khảo sát</a>
+        <% } %>
+      </form>
+      <form class="form" method="GET" action="/admin/progress" style="grid-template-columns: 1fr 1fr auto auto; gap: 12px; margin-bottom: 12px;">
+        <input class="input" type="date" name="start_date" value="<%= rangeStart || '' %>" placeholder="Ngày bắt đầu" />
+        <input class="input" type="number" name="days" min="1" value="<%= rangeEnd && rangeStart ? Math.max(1, Math.round((new Date(rangeEnd) - new Date(rangeStart)) / 86400000)) : '' %>" placeholder="Số ngày" />
+        <input type="hidden" name="range" value="1" />
+        <button class="btn btn-outline" type="submit">Xem thống kê theo khoảng ngày</button>
+        <% if (rangeStart) { %>
+          <a class="btn btn-outline" href="/admin/progress">Bỏ chế độ khoảng ngày</a>
+        <% } %>
+      </form>
+      <% if (weekStart && weeklyRows && weeklyRows.length) { %>
+        <h3>Thống kê theo tuần (<%= weekStart %> → <%= weekEnd %>)</h3>
+        <table class="table" style="margin-bottom: 18px;">
+          <thead>
+            <tr>
+              <th>Lớp</th>
+              <th>Tổng HS</th>
+              <th>Tự giác</th>
+              <th>Hoàn thành</th>
+              <th>Đúng hạn</th>
+              <th>Muộn</th>
+              <th>Khảo sát</th>
+              <th>Tự giác (khảo sát)</th>
+              <th>Chưa tự giác</th>
+              <th>Làm muộn % (khảo sát)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% weeklyRows.forEach(w => { %>
+              <tr>
+                <td><%= w.class_name %></td>
+                <td><%= w.total_students %></td>
+                <td><%= w.active_students %> (<%= w.total_students ? Math.round(w.active_students * 100 / w.total_students) : 0 %>%)</td>
+                <td><%= w.completed_students %> (<%= w.total_students ? Math.round(w.completed_students * 100 / w.total_students) : 0 %>%)</td>
+                <td><%= w.on_time_students %> (<%= w.total_students ? Math.round(w.on_time_students * 100 / w.total_students) : 0 %>%)</td>
+                <td><%= w.late_students %> (<%= w.total_students ? Math.round(w.late_students * 100 / w.total_students) : 0 %>%)</td>
+                <td><%= w.surveyed_students != null ? w.surveyed_students : '-' %></td>
+                <td><%= w.survey_self_disciplined != null ? w.survey_self_disciplined : '-' %></td>
+                <td><%= w.survey_not_self_disciplined != null ? w.survey_not_self_disciplined : '-' %></td>
+                <td><%= w.survey_late_rate_pct != null ? w.survey_late_rate_pct + '%' : '-' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <a class="btn btn-secondary" href="/admin/progress/export/weekly/csv?week_start=<%= weekStart %>">Xuất CSV tuần</a>
+          <a class="btn btn-secondary" href="/admin/progress/export/weekly/pdf?week_start=<%= weekStart %>">Xuất PDF tuần</a>
+        </div>
+      <% } %>
+      <% if (rangeStart && rangeRows && rangeRows.length) { %>
+        <h3>Thống kê theo khoảng (<%= rangeStart %> → <%= rangeEnd %>)</h3>
+        <table class="table" style="margin-bottom: 18px;">
+          <thead>
+            <tr>
+              <th>Lớp</th>
+              <th>Tổng HS</th>
+              <th>Tự giác</th>
+              <th>Hoàn thành</th>
+              <th>Đúng hạn</th>
+              <th>Muộn</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% rangeRows.forEach(w => { %>
+              <tr>
+                <td><%= w.class_name %></td>
+                <td><%= w.total_students %></td>
+                <td><%= w.active_students %> (<%= w.total_students ? Math.round(w.active_students * 100 / w.total_students) : 0 %>%)</td>
+                <td><%= w.completed_students %> (<%= w.total_students ? Math.round(w.completed_students * 100 / w.total_students) : 0 %>%)</td>
+                <td><%= w.on_time_students %> (<%= w.total_students ? Math.round(w.on_time_students * 100 / w.total_students) : 0 %>%)</td>
+                <td><%= w.late_students %> (<%= w.total_students ? Math.round(w.late_students * 100 / w.total_students) : 0 %>%)</td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <a class="btn btn-secondary" href="/admin/progress/export/range/csv?start_date=<%= rangeStart %>&days=<%= rangeEnd && rangeStart ? Math.max(1, Math.round((new Date(rangeEnd) - new Date(rangeStart)) / 86400000)) : 1 %>">Xuất CSV khoảng ngày</a>
+          <a class="btn btn-secondary" href="/admin/progress/export/range/pdf?start_date=<%= rangeStart %>&days=<%= rangeEnd && rangeStart ? Math.max(1, Math.round((new Date(rangeEnd) - new Date(rangeStart)) / 86400000)) : 1 %>">Xuất PDF khoảng ngày</a>
+        </div>
+      <% } %>
+      <% if (surveyWeekStart) { %>
+        <h3>Khảo sát theo tuần (<%= surveyWeekStart %>)</h3>
+        <form class="form" method="POST" action="/admin/surveys" style="grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <select class="input" name="class_id">
+            <% (classes || []).forEach(c => { %>
+              <option value="<%= c.id %>"><%= c.name %></option>
+            <% }) %>
+          </select>
+          <input class="input" type="date" name="week_start" value="<%= surveyWeekStart %>" />
+          <input class="input" type="number" name="surveyed_students" min="0" placeholder="Số HS khảo sát" />
+          <input class="input" type="number" name="self_disciplined" min="0" placeholder="Tự giác" />
+          <input class="input" type="number" name="not_self_disciplined" min="0" placeholder="Chưa tự giác" />
+          <input class="input" type="number" name="late_rate_pct" min="0" max="100" placeholder="Làm muộn %" />
+          <button class="btn btn-primary" type="submit">Lưu khảo sát</button>
+        </form>
+        <% if (surveyRows && surveyRows.length) { %>
+          <table class="table" style="margin-bottom: 12px;">
+            <thead>
+              <tr>
+                <th>Lớp</th>
+                <th>Khảo sát</th>
+                <th>Tự giác</th>
+                <th>Chưa tự giác</th>
+                <th>Làm muộn %</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% surveyRows.forEach(s => { %>
+                <tr>
+                  <td><%= s.class_name %></td>
+                  <td><%= s.surveyed_students || 0 %></td>
+                  <td><%= s.self_disciplined || 0 %></td>
+                  <td><%= s.not_self_disciplined || 0 %></td>
+                  <td><%= s.late_rate_pct != null ? s.late_rate_pct + '%' : '-' %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+          <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <a class="btn btn-secondary" href="/admin/surveys/export/csv?week_start=<%= surveyWeekStart %>">Xuất CSV khảo sát</a>
+            <a class="btn btn-secondary" href="/admin/surveys/export/pdf?week_start=<%= surveyWeekStart %>">Xuất PDF khảo sát</a>
+          </div>
+        <% } %>
+      <% } %>
       <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
         <a class="btn btn-secondary" href="/admin/progress/export/csv">Xuất Excel (CSV)</a>
         <a class="btn btn-secondary" href="/admin/progress/export/pdf">Xuất PDF</a>
