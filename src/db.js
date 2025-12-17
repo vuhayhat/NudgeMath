@@ -35,7 +35,7 @@ export async function ensureSchema() {
     SET search_path TO public;
 
     CREATE TABLE IF NOT EXISTS teachers (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       name TEXT,
@@ -43,7 +43,7 @@ export async function ensureSchema() {
     );
 
     CREATE TABLE IF NOT EXISTS students (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       email TEXT,
       password_hash TEXT NOT NULL,
       name TEXT,
@@ -51,7 +51,7 @@ export async function ensureSchema() {
     );
 
     CREATE TABLE IF NOT EXISTS classes (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       locked BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -64,7 +64,7 @@ export async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS students_username_uq ON students(username);
 
     CREATE TABLE IF NOT EXISTS exercises (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       title TEXT NOT NULL,
       description TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -87,14 +87,14 @@ export async function ensureSchema() {
     ALTER TABLE exercises ADD COLUMN IF NOT EXISTS topic TEXT;
 
     CREATE TABLE IF NOT EXISTS assignments (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       class_id INT REFERENCES classes(id) ON DELETE CASCADE,
       exercise_id INT REFERENCES exercises(id) ON DELETE CASCADE,
       assigned_at TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS submissions (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       student_id INT REFERENCES students(id) ON DELETE CASCADE,
       exercise_id INT REFERENCES exercises(id) ON DELETE CASCADE,
       content TEXT,
@@ -123,7 +123,7 @@ export async function ensureSchema() {
     ALTER TABLE submissions ADD COLUMN IF NOT EXISTS streak_delta INT DEFAULT 0;
     ALTER TABLE submissions ADD COLUMN IF NOT EXISTS content TEXT;
     CREATE TABLE IF NOT EXISTS learning_plans (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       class_id INT REFERENCES classes(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       start_at TIMESTAMPTZ,
@@ -132,7 +132,7 @@ export async function ensureSchema() {
     );
 
     CREATE TABLE IF NOT EXISTS plan_items (
-      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      id SERIAL PRIMARY KEY,
       plan_id INT REFERENCES learning_plans(id) ON DELETE CASCADE,
       topic TEXT,
       skill TEXT,
