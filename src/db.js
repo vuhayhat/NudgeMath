@@ -32,24 +32,29 @@ export const pool = createPool()
 export async function ensureSchema() {
   if (!pool) return
   await pool.query(`
+    SET search_path TO public;
+
+    CREATE SEQUENCE IF NOT EXISTS teachers_id_seq;
     CREATE TABLE IF NOT EXISTS teachers (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('teachers_id_seq'),
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       name TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE SEQUENCE IF NOT EXISTS students_id_seq;
     CREATE TABLE IF NOT EXISTS students (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('students_id_seq'),
       email TEXT,
       password_hash TEXT NOT NULL,
       name TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE SEQUENCE IF NOT EXISTS classes_id_seq;
     CREATE TABLE IF NOT EXISTS classes (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('classes_id_seq'),
       name TEXT NOT NULL,
       locked BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -61,8 +66,9 @@ export async function ensureSchema() {
     ALTER TABLE students ADD COLUMN IF NOT EXISTS stars INT DEFAULT 0;
     CREATE UNIQUE INDEX IF NOT EXISTS students_username_uq ON students(username);
 
+    CREATE SEQUENCE IF NOT EXISTS exercises_id_seq;
     CREATE TABLE IF NOT EXISTS exercises (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('exercises_id_seq'),
       title TEXT NOT NULL,
       description TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -84,15 +90,17 @@ export async function ensureSchema() {
     ALTER TABLE exercises ADD COLUMN IF NOT EXISTS difficulty TEXT;
     ALTER TABLE exercises ADD COLUMN IF NOT EXISTS topic TEXT;
 
+    CREATE SEQUENCE IF NOT EXISTS assignments_id_seq;
     CREATE TABLE IF NOT EXISTS assignments (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('assignments_id_seq'),
       class_id INT REFERENCES classes(id) ON DELETE CASCADE,
       exercise_id INT REFERENCES exercises(id) ON DELETE CASCADE,
       assigned_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE SEQUENCE IF NOT EXISTS submissions_id_seq;
     CREATE TABLE IF NOT EXISTS submissions (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('submissions_id_seq'),
       student_id INT REFERENCES students(id) ON DELETE CASCADE,
       exercise_id INT REFERENCES exercises(id) ON DELETE CASCADE,
       content TEXT,
@@ -120,8 +128,9 @@ export async function ensureSchema() {
     ALTER TABLE submissions ADD COLUMN IF NOT EXISTS stars INT DEFAULT 0;
     ALTER TABLE submissions ADD COLUMN IF NOT EXISTS streak_delta INT DEFAULT 0;
     ALTER TABLE submissions ADD COLUMN IF NOT EXISTS content TEXT;
+    CREATE SEQUENCE IF NOT EXISTS learning_plans_id_seq;
     CREATE TABLE IF NOT EXISTS learning_plans (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('learning_plans_id_seq'),
       class_id INT REFERENCES classes(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       start_at TIMESTAMPTZ,
@@ -129,8 +138,9 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE SEQUENCE IF NOT EXISTS plan_items_id_seq;
     CREATE TABLE IF NOT EXISTS plan_items (
-      id SERIAL PRIMARY KEY,
+      id INT PRIMARY KEY DEFAULT nextval('plan_items_id_seq'),
       plan_id INT REFERENCES learning_plans(id) ON DELETE CASCADE,
       topic TEXT,
       skill TEXT,
