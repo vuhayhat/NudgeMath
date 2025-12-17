@@ -146,10 +146,10 @@ app.get('/admin/students', async (req, res) => {
 })
 
 app.get('/admin/exercises', async (req, res) => {
-  if (!usePg) return res.render('admin_exercises', { exercises: [], classes: [] })
+  if (!usePg) return res.render('admin_exercises', { exercises: [], classes: [], ai: req.query.ai || null })
   const exercises = await pool.query('SELECT * FROM exercises ORDER BY id DESC')
   const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
-  res.render('admin_exercises', { exercises: exercises.rows, classes: classes.rows })
+  res.render('admin_exercises', { exercises: exercises.rows, classes: classes.rows, ai: req.query.ai || null })
 })
 
 app.get('/admin/exercises/new/manual', async (req, res) => {
@@ -244,26 +244,26 @@ async function generateAIQuestionGemini(grade, difficulty, topic) {
 }
 
 app.get('/admin/exercises/new/ai', async (req, res) => {
-  if (!usePg) return res.render('admin_exercise_new_ai', { classes: [] })
+  if (!usePg) return res.render('admin_exercise_new_ai', { classes: [], error: req.query.error || null })
   const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
-  res.render('admin_exercise_new_ai', { classes: classes.rows })
+  res.render('admin_exercise_new_ai', { classes: classes.rows, error: req.query.error || null })
 })
 
 app.post('/admin/exercises/new/ai', async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
   const { grade_level, difficulty, topic, class_id } = req.body
-  let gen
   try {
-    gen = await generateAIQuestionGemini(grade_level ? parseInt(grade_level, 10) : null, difficulty, topic)
+    const gen = await generateAIQuestionGemini(grade_level ? parseInt(grade_level, 10) : null, difficulty, topic)
+    const title = gen.question.slice(0, 120)
+    const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`
+    const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, grade_level ? parseInt(grade_level, 10) : null, difficulty || null, topic || null])
+    const exId = created.rows[0].id
+    if (class_id) await pool.query('INSERT INTO assignments (class_id, exercise_id) VALUES ($1,$2)', [parseInt(class_id, 10), exId])
+    res.redirect('/admin/exercises?ai=done')
   } catch (e) {
-    gen = generateAIQuestion(grade_level ? parseInt(grade_level, 10) : null, difficulty, topic)
+    const msg = encodeURIComponent(e && e.message ? e.message : 'Gemini bị lỗi')
+    res.redirect(`/admin/exercises/new/ai?error=${msg}`)
   }
-  const title = gen.question.slice(0, 120)
-  const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`
-  const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, grade_level ? parseInt(grade_level, 10) : null, difficulty || null, topic || null])
-  const exId = created.rows[0].id
-  if (class_id) await pool.query('INSERT INTO assignments (class_id, exercise_id) VALUES ($1,$2)', [parseInt(class_id, 10), exId])
-  res.redirect('/admin/exercises')
 })
 
 app.get('/student/exercises', requireStudent, async (req, res) => {

@@ -16,6 +16,9 @@
   <div class="container">
   <div class="card">
     <h1>Quản lý bài tập</h1>
+    <% if (typeof ai !== 'undefined' && ai) { %>
+      <div style="background:#e7ffe7;color:#0a0;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Đã tạo bài bằng Gemini thành công</div>
+    <% } %>
     <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
       <a class="btn btn-primary" href="/admin/exercises/new/manual">Tạo bài thủ công</a>
       <a class="btn btn-secondary" href="/admin/exercises/new/ai">Tạo bài bằng AI</a>

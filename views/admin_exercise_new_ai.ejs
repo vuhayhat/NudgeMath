@@ -17,7 +17,10 @@
   <div class="container">
     <div class="card">
       <h1>Tạo bài bằng AI</h1>
-      <form class="form" method="POST" action="/admin/exercises/new/ai">
+      <% if (error) { %>
+        <div style="background:#ffe8e8;color:#a60;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Lỗi Gemini: <%= error %></div>
+      <% } %>
+      <form class="form" method="POST" action="/admin/exercises/new/ai" id="ai-form">
         <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
           <select class="input" name="grade_level" required>
             <option value="10">Lớp 10</option>
@@ -37,10 +40,25 @@
             <option value="<%= c.id %>"><%= c.name %></option>
           <% }) %>
         </select>
-        <button class="btn btn-primary" type="submit">Tạo bài bằng AI</button>
+        <button class="btn btn-primary" type="submit" id="submit-btn">Tạo bài bằng AI</button>
       </form>
       <p class="muted">Hệ thống sẽ tạo câu hỏi, 4 đáp án, đáp án đúng và giải thích chi tiết.</p>
     </div>
   </div>
+  <div id="loading" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;">
+    <div style="background:rgba(0,0,0,0.6);padding:16px 20px;border-radius:8px;">Đang sinh bài bằng Gemini, vui lòng đợi...</div>
+  </div>
+  <script>
+    const form = document.getElementById('ai-form');
+    const btn = document.getElementById('submit-btn');
+    const overlay = document.getElementById('loading');
+    if (form && btn && overlay) {
+      form.addEventListener('submit', function() {
+        btn.disabled = true;
+        btn.textContent = 'Đang tạo...';
+        overlay.style.display = 'flex';
+      });
+    }
+  </script>
 </body>
 </html>
