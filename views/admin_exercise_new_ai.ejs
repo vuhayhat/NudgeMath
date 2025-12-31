@@ -20,19 +20,18 @@
       <% if (typeof error !== 'undefined' && error) { %>
         <div style="background:#ffe8e8;color:#a60;padding:8px 12px;border-radius:6px;margin-bottom:12px;">Lỗi Gemini: <%= error %></div>
       <% } %>
-      <form class="form" method="POST" action="/admin/exercises/new/ai" id="ai-form">
-        <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-          <select class="input" name="grade_level" required>
-            <option value="10" <%= selectedGrade==='10'?'selected':'' %>>Lớp 10</option>
-            <option value="11" <%= selectedGrade==='11'?'selected':'' %>>Lớp 11</option>
-            <option value="12" <%= selectedGrade==='12'?'selected':'' %>>Lớp 12</option>
-          </select>
+      <form class="form" method="POST" action="/admin/exercises/new/ai" id="ai-form" enctype="multipart/form-data">
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
           <select class="input" name="difficulty" required>
-            <option value="easy" <%= selectedDifficulty==='easy'?'selected':'' %>>Dễ</option>
-            <option value="medium" <%= selectedDifficulty==='medium'?'selected':'' %>>Trung bình</option>
-            <option value="hard" <%= selectedDifficulty==='hard'?'selected':'' %>>Khó</option>
+            <option value="easy" <%= (selectedDifficulty||'')==='easy'?'selected':'' %>>Dễ</option>
+            <option value="medium" <%= (selectedDifficulty||'')==='medium'?'selected':'' %>>Trung bình</option>
+            <option value="hard" <%= (selectedDifficulty||'')==='hard'?'selected':'' %>>Khó</option>
           </select>
           <input class="input" type="text" name="topic" placeholder="Chủ đề (ví dụ: hàm số, tích phân)" value="<%= selectedTopic %>" required />
+        </div>
+        <div>
+          <label class="muted" for="images">Đính kèm ảnh để AI tham khảo (tùy chọn)</label>
+          <input class="input" id="images" type="file" name="images" accept="image/*" multiple />
         </div>
         <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
           <select class="input" name="class_id">

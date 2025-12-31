@@ -85,6 +85,7 @@ export async function ensureSchema() {
     ALTER TABLE exercises ADD COLUMN IF NOT EXISTS grade_level INT;
     ALTER TABLE exercises ADD COLUMN IF NOT EXISTS difficulty TEXT;
     ALTER TABLE exercises ADD COLUMN IF NOT EXISTS topic TEXT;
+    ALTER TABLE exercises ADD COLUMN IF NOT EXISTS images TEXT[];
 
     CREATE TABLE IF NOT EXISTS assignments (
       id SERIAL PRIMARY KEY,

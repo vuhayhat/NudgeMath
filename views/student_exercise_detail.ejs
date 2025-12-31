@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Làm bài</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
   <header class="app-header">
@@ -20,7 +23,17 @@
         <h1>Không tìm thấy bài tập</h1>
       <% } else { %>
         <h1><%= ex.title %></h1>
-        <p><%= ex.question || ex.description || '' %></p>
+        <p class="math-content"><%= ex.question || ex.description || '' %></p>
+        <% if (ex.images && ex.images.length) { %>
+          <div style="margin:10px 0;"><strong>Ảnh tham khảo:</strong></div>
+          <div class="grid" style="grid-template-columns: repeat(3, 1fr); gap: 8px;">
+            <% ex.images.forEach(img => { %>
+              <a href="/uploads/<%= img %>" target="_blank">
+                <img src="/uploads/<%= img %>" alt="ảnh" style="width:100%;max-height:140px;object-fit:cover;border:1px solid var(--border);border-radius:6px" />
+              </a>
+            <% }) %>
+          </div>
+        <% } %>
         <form class="form" method="POST" action="/student/exercises/<%= ex.id %>/submit" enctype="multipart/form-data">
           <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
             <label class="radio"><input type="radio" name="selected" value="A" required /> A. <%= ex.opt_a %></label>
@@ -38,5 +51,11 @@
       <% } %>
     </div>
   </div>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var opts = { ignoredTags: ['script','noscript','style','textarea','code','option'] };
+    document.querySelectorAll('.math-content').forEach(function(el){ try { renderMathInElement(el, opts) } catch(e) {} });
+  });
+</script>
 </body>
 </html>

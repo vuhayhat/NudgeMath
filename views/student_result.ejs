@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kết quả bài làm</title>
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 </head>
 <body>
   <header class="app-header">
@@ -21,7 +24,7 @@
       <% if (ex.mode === 'ai') { %>
         <p>Kết quả: <strong><%= isCorrect ? 'Đúng' : 'Sai' %></strong></p>
         <% if (explanation) { %>
-          <div class="alert alert-info"><pre><%= explanation %></pre></div>
+          <div class="alert alert-info"><div class="math-content"><%= explanation %></div></div>
         <% } %>
         <% if (typeof nudge !== 'undefined' && nudge) { %>
           <div class="alert" style="background:#f9fff2;border:1px solid #dce8c8;color:#2f6e2f;padding:8px 12px;border-radius:6px;">
@@ -47,5 +50,11 @@
       <a class="btn btn-outline" href="/student/exercises">Quay lại danh sách</a>
     </div>
   </div>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var opts = { ignoredTags: ['script','noscript','style','textarea','code','option'] };
+    document.querySelectorAll('.math-content').forEach(function(el){ try { renderMathInElement(el, opts) } catch(e) {} });
+  });
+</script>
 </body>
 </html>

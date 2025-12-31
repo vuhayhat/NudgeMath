@@ -17,14 +17,8 @@
   <div class="container">
     <div class="card">
       <h1>Tạo bài thủ công</h1>
-      <form class="form" method="POST" action="/admin/exercises/new/manual">
-        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 12px;">
-          <select class="input" name="grade_level">
-            <option value="">Lớp (tùy chọn)</option>
-            <option value="10">Lớp 10</option>
-            <option value="11">Lớp 11</option>
-            <option value="12">Lớp 12</option>
-          </select>
+      <form class="form" method="POST" action="/admin/exercises/new/manual" enctype="multipart/form-data">
+        <div class="grid" style="grid-template-columns: 1fr; gap: 12px;">
           <input class="input" type="text" name="topic" placeholder="Chủ đề (tùy chọn)" />
         </div>
         <textarea class="input" name="question" placeholder="Nội dung câu hỏi" required rows="4"></textarea>
@@ -50,6 +44,10 @@
           </select>
           <input class="input" type="datetime-local" name="due_at" placeholder="Ngày kết thúc (tùy chọn)" />
           <input class="input" type="number" name="due_hours" min="1" placeholder="Giờ kết thúc sau (>=1 giờ)" />
+        </div>
+        <div>
+          <label class="muted" for="images">Đính kèm ảnh (tùy chọn)</label>
+          <input class="input" id="images" type="file" name="images" accept="image/*" multiple />
         </div>
         <button class="btn btn-primary" type="submit">Tạo bài</button>
       </form>

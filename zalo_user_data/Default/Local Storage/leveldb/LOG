@@ -1,0 +1,17 @@
+2026/01/01-03:40:07.875 1ce4 Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/01/01-03:40:07.883 1ce4 Recovering log #8
+2026/01/01-03:40:07.884 1ce4 Level-0 table #10: started
+2026/01/01-03:40:07.890 1ce4 Level-0 table #10: 79494 bytes OK
+2026/01/01-03:40:07.891 1ce4 Recovering log #9
+2026/01/01-03:40:07.893 1ce4 Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\Local Storage\leveldb/000009.log 
+2026/01/01-03:40:07.895 1ce4 Delete type=0 #8
+2026/01/01-03:40:07.896 5a40 Compacting 4@0 + 0@1 files
+2026/01/01-03:40:07.906 5a40 Generated table #11@0: 607 keys, 141494 bytes
+2026/01/01-03:40:07.907 5a40 Compacted 4@0 + 0@1 files => 141494 bytes
+2026/01/01-03:40:07.908 5a40 compacted to: files[ 0 1 0 0 0 0 0 ]
+2026/01/01-03:40:07.909 5a40 Delete type=2 #3
+2026/01/01-03:40:07.909 5a40 Delete type=2 #6
+2026/01/01-03:40:07.909 5a40 Delete type=2 #8
+2026/01/01-03:40:07.909 5a40 Delete type=2 #10
+2026/01/01-03:40:19.926 53fc Level-0 table #13: started
+2026/01/01-03:40:19.955 53fc Level-0 table #13: 79422 bytes OK

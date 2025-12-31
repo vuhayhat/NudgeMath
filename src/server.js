@@ -269,19 +269,28 @@ app.get('/admin/exercises', async (req, res) => {
   res.render('admin_exercises', { exercises: exercises.rows, classes: classes.rows, assignments: assignments.rows, ai: req.query.ai || null, deleted: req.query.deleted || null })
 })
 
+app.get('/admin/exercises/:id', async (req, res) => {
+  if (!usePg) return res.render('admin_exercise_detail', { ex: null })
+  const id = parseInt(req.params.id, 10)
+  const ex = await pool.query('SELECT * FROM exercises WHERE id=$1', [id])
+  res.render('admin_exercise_detail', { ex: ex.rows[0] })
+})
+
 app.get('/admin/exercises/new/manual', async (req, res) => {
   if (!usePg) return res.render('admin_exercise_new_manual', { classes: [] })
   const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
   res.render('admin_exercise_new_manual', { classes: classes.rows })
 })
 
-app.post('/admin/exercises/new/manual', async (req, res) => {
+app.post('/admin/exercises/new/manual', upload.array('images', 10), async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
-  const { question, opt_a, opt_b, opt_c, opt_d, answer, class_id, topic, grade_level, due_at, due_hours } = req.body
+  const { question, opt_a, opt_b, opt_c, opt_d, answer, class_id, topic, due_at, due_hours } = req.body
   if (!question || !opt_a || !opt_b || !opt_c || !opt_d || !answer) return res.redirect('/admin/exercises')
   const title = question.slice(0, 120)
-  const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, topic, grade_level) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`
-  const created = await pool.query(q, [title, null, 'manual', question, opt_a, opt_b, opt_c, opt_d, answer, topic || null, grade_level ? parseInt(grade_level, 10) : null])
+  const files = Array.isArray(req.files) ? req.files : []
+  const images = files.map(f => f.filename)
+  const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, topic, images) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`
+  const created = await pool.query(q, [title, null, 'manual', question, opt_a, opt_b, opt_c, opt_d, answer, topic || null, images.length ? images : null])
   const exId = created.rows[0].id
   if (class_id) {
     const h = due_hours ? parseInt(due_hours, 10) : null
@@ -349,7 +358,7 @@ function computeAutoNudge(e, selected, isCorrect) {
   return { nudge, sticker, stars, streak_delta }
 }
 
-async function generateAIQuestionGemini(grade, difficulty, topic) {
+async function generateAIQuestionGemini(grade, difficulty, topic, images = []) {
   const apiKey = process.env.GEMINI_API_KEY
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
   if (!apiKey) throw new Error('Missing GEMINI_API_KEY')
@@ -357,17 +366,28 @@ async function generateAIQuestionGemini(grade, difficulty, topic) {
   const prompt = [
     `Bạn là trợ lý tạo bài toán trắc nghiệm Toán bằng tiếng Việt.`,
     `Yêu cầu: tạo 1 câu hỏi trắc nghiệm phù hợp lớp ${grade || ''} độ khó ${difficulty || ''} theo chủ đề "${topic || ''}".`,
+    `Nếu có ảnh đính kèm, hãy tham khảo để tạo bài tương tự về ngữ cảnh/kỹ thuật và độ khó không thấp hơn.`,
     `Đầu ra chỉ là JSON không kèm giải thích, không markdown, với schema:`,
     `{"question": string, "opts": {"A": string, "B": string, "C": string, "D": string}, "answer": "A"|"B"|"C"|"D", "explains": {"A": string, "B": string, "C": string, "D": string}, "solution": string}`
   ].join('\n')
-  const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: prompt }]
-      }
-    ]
+  const parts = [{ text: prompt }]
+  const guessMime = (fn) => {
+    const ext = (path.extname(fn) || '').toLowerCase()
+    if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+    if (ext === '.png') return 'image/png'
+    if (ext === '.webp') return 'image/webp'
+    return 'application/octet-stream'
   }
+  // If images were uploaded for AI reference, include them as inlineData
+  const aiImages = Array.isArray(images) ? images : []
+  for (const fname of aiImages) {
+    try {
+      const filePath = path.join(uploadDir, fname)
+      const data = fs.readFileSync(filePath, { encoding: 'base64' })
+      parts.push({ inlineData: { mimeType: guessMime(fname), data } })
+    } catch {}
+  }
+  const body = { contents: [{ role: 'user', parts }] }
   const delays = [1200, 2500, 5000]
   const minInterval = parseInt(process.env.GEMINI_MIN_INTERVAL_MS || '1200', 10)
   for (let i = 0; i <= delays.length; i++) {
@@ -406,43 +426,40 @@ async function generateAIQuestionGemini(grade, difficulty, topic) {
 }
 
 app.get('/admin/exercises/new/ai', async (req, res) => {
-  if (!usePg) return res.render('admin_exercise_new_ai', { classes: [], error: req.query.error || null, selectedGrade: req.query.grade_level || null, selectedDifficulty: req.query.difficulty || null, selectedTopic: req.query.topic || '', selectedClassId: req.query.class_id || '' })
+  if (!usePg) return res.render('admin_exercise_new_ai', { classes: [], error: req.query.error || null, selectedTopic: req.query.topic || '', selectedDifficulty: req.query.difficulty || null, selectedClassId: req.query.class_id || '' })
   const classes = await pool.query('SELECT * FROM classes ORDER BY name ASC')
-  res.render('admin_exercise_new_ai', { classes: classes.rows, error: req.query.error || null, selectedGrade: req.query.grade_level || null, selectedDifficulty: req.query.difficulty || null, selectedTopic: req.query.topic || '', selectedClassId: req.query.class_id || '' })
+  res.render('admin_exercise_new_ai', { classes: classes.rows, error: req.query.error || null, selectedTopic: req.query.topic || '', selectedDifficulty: req.query.difficulty || null, selectedClassId: req.query.class_id || '' })
 })
 
-app.post('/admin/exercises/new/ai', async (req, res) => {
+app.post('/admin/exercises/new/ai', upload.array('images', 10), async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
-  const { grade_level, difficulty, topic, class_id, due_at, due_hours } = req.body
-  const g = grade_level ? parseInt(grade_level, 10) : null
-  const d = (difficulty || '').toLowerCase()
+  const { topic, difficulty, class_id, due_at, due_hours } = req.body
+  const g = 10
+  const d = (difficulty || 'medium').toLowerCase()
   const t = (topic || '').trim()
-  if (!t) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Bạn chưa nhập chủ đề')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
-  if (!g || ![10,11,12].includes(g)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Lớp không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
-  if (!['easy','medium','hard'].includes(d)) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Độ khó không hợp lệ')}&grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
+  if (!t) return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent('Bạn chưa nhập chủ đề')}&topic=${encodeURIComponent(topic || '')}&difficulty=${encodeURIComponent(difficulty || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
+  const files = Array.isArray(req.files) ? req.files : []
+  const images = files.map(f => f.filename)
+  let gen
   try {
-    const gen = await generateAIQuestionGemini(g, d, t)
-    const title = gen.question.slice(0, 120)
-    const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`
-    const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, g, d || null, t || null])
-    const exId = created.rows[0].id
-    if (class_id) {
-      const h = due_hours ? parseInt(due_hours, 10) : null
-      if (h && h > 0) {
-        await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2, NOW() + make_interval(hours => $3))', [parseInt(class_id, 10), exId, h])
-      } else {
-        const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
-        await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [parseInt(class_id, 10), exId, dueAtStr])
-      }
-    }
-    res.redirect('/admin/exercises?ai=done')
+    gen = await generateAIQuestionGemini(g, d, t, images)
   } catch (e) {
-    let raw = e && e.message ? e.message : 'Gemini bị lỗi'
-    if (/429/.test(raw)) raw = '429 - vượt hạn mức hoặc rate limit, vui lòng thử lại sau'
-    const qs = `grade_level=${encodeURIComponent(grade_level || '')}&difficulty=${encodeURIComponent(difficulty || '')}&topic=${encodeURIComponent(topic || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`
-    const msg = encodeURIComponent(raw)
-    res.redirect(`/admin/exercises/new/ai?error=${msg}&${qs}`)
+    gen = generateAIQuestion(g, d, t)
   }
+  const title = gen.question.slice(0, 120)
+  const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic, images) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`
+  const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, g, d || null, t || null, images.length ? images : null])
+  const exId = created.rows[0].id
+  if (class_id) {
+    const h = due_hours ? parseInt(due_hours, 10) : null
+    if (h && h > 0) {
+      await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2, NOW() + make_interval(hours => $3))', [parseInt(class_id, 10), exId, h])
+    } else {
+      const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
+      await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [parseInt(class_id, 10), exId, dueAtStr])
+    }
+  }
+  res.redirect('/admin/exercises?ai=done')
 })
 
 app.get('/student/exercises', requireStudent, async (req, res) => {
