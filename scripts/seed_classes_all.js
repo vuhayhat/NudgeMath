@@ -89,11 +89,11 @@ async function main() {
   ]
 
   await seedClass('11 A8', names_11A8, '11a8.', '11A8@2025')
-  await seedClass('12 A8', names_12A8, '12a8.', '12A8@2025')
+  await seedClass('12 A3', names_12A8, '12a3.', '12A3@2025')
   await seedClass('12 A6', names_12A6, '12a6.', '12A6@2025')
   await seedClass('12 A1', names_12A1, '12a1.', '12A1@2025')
 
-  const classesQ = await pool.query("SELECT id, name FROM classes WHERE name IN ('11 A8','12 A8','12 A6','12 A1')")
+  const classesQ = await pool.query("SELECT id, name FROM classes WHERE name IN ('11 A8','12 A3','12 A6','12 A1')")
   const classMap = new Map(classesQ.rows.map(r => [r.name, r.id]))
 
   function isoDateTime(dstr, h) {
@@ -178,13 +178,13 @@ async function main() {
 
   const a11 = await assignExercise('11 A8', w2a, 12)
   if (a11) await submitFor('11 A8', a11.exerciseId, a11.assignedAt, a11.dueAt, 0.43, 0.18)
-  for (const cn of ['12 A1','12 A6','12 A8']) {
+  for (const cn of ['12 A1','12 A6','12 A3']) {
     const a12 = await assignExercise(cn, w2b, 12)
     if (a12) await submitFor(cn, a12.exerciseId, a12.assignedAt, a12.dueAt, 0.43, 0.18)
   }
 
   for (const w of weeks) {
-    for (const cn of ['11 A8','12 A1','12 A6','12 A8']) {
+    for (const cn of ['11 A8','12 A1','12 A6','12 A3']) {
       const as = await assignExercise(cn, w.start, 12)
       if (as) await submitFor(cn, as.exerciseId, as.assignedAt, as.dueAt, w.rateC, w.rateT)
     }
@@ -273,7 +273,7 @@ async function main() {
 
   async function seedSurveyWeek1() {
     const w = '2025-09-22'
-    for (const cn of ['11 A8','12 A1','12 A6','12 A8']) {
+    for (const cn of ['11 A8','12 A1','12 A6','12 A3']) {
       const classId = classMap.get(cn)
       if (!classId) continue
       const cntQ = await pool.query('SELECT COUNT(*)::int AS cnt FROM students WHERE class_id=$1', [classId])
@@ -299,7 +299,7 @@ async function main() {
       { start: '2025-11-10', selfRate: 0.85, latePct: 18 }
     ]
     for (const p of plans) {
-      for (const cn of ['11 A8','12 A1','12 A6','12 A8']) {
+      for (const cn of ['11 A8','12 A1','12 A6','12 A3']) {
         const classId = classMap.get(cn)
         if (!classId) continue
         const cntQ = await pool.query('SELECT COUNT(*)::int AS cnt FROM students WHERE class_id=$1', [classId])
