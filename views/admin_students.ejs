@@ -28,6 +28,7 @@
           <option value="<%= c.id %>"><%= c.name %></option>
         <% }) %>
       </select>
+      <input class="input" type="text" name="phone" placeholder="Số điện thoại (tùy chọn)" />
       <input class="input" type="text" name="password" placeholder="Mật khẩu (tùy chọn)" />
       <button class="btn btn-primary" type="submit">Thêm học sinh</button>
     </form>
@@ -51,6 +52,7 @@
           <th>Họ tên</th>
           <th>Lớp</th>
           <th>Username</th>
+          <th>Điện thoại</th>
           <th>Streak</th>
           <th>Sao</th>
           <th>Hành động</th>
@@ -62,6 +64,12 @@
             <td><%= s.name %></td>
             <td><%= s.class_name || '-' %></td>
             <td><%= s.username %></td>
+            <td>
+              <form class="inline" method="POST" action="/admin/students/<%= s.id %>/phone" style="grid-template-columns: 1fr auto;">
+                <input class="input" type="text" name="phone" placeholder="SĐT" value="<%= s.phone || '' %>" />
+                <button class="btn btn-outline" type="submit">Lưu</button>
+              </form>
+            </td>
             <td><%= s.streak || 0 %></td>
             <td><%= s.stars || 0 %></td>
             <td>

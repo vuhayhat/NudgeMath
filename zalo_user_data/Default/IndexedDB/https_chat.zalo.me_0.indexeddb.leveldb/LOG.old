@@ -1,12 +1,3 @@
-2026/01/01-03:39:12.422 3d98 Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/MANIFEST-000001
-2026/01/01-03:39:12.422 3d98 Recovering log #4
-2026/01/01-03:39:12.466 3d98 Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/000004.log 
-2026/01/01-03:39:18.259 50a4 Level-0 table #8: started
-2026/01/01-03:39:18.295 50a4 Level-0 table #8: 1267572 bytes OK
-2026/01/01-03:39:18.298 50a4 Delete type=0 #4
-2026/01/01-03:39:18.308 50a4 Compacting 1@1 + 1@2 files
-2026/01/01-03:39:18.348 50a4 Generated table #9@1: 11115 keys, 1860678 bytes
-2026/01/01-03:39:18.348 50a4 Compacted 1@1 + 1@2 files => 1860678 bytes
-2026/01/01-03:39:18.350 50a4 compacted to: files[ 0 0 1 0 0 0 0 ]
-2026/01/01-03:39:18.351 50a4 Delete type=2 #5
-2026/01/01-03:39:18.351 50a4 Delete type=2 #8
+2026/01/01-14:55:19.518 4564 Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/01-14:55:19.518 4564 Recovering log #41
+2026/01/01-14:55:19.539 4564 Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/000041.log 

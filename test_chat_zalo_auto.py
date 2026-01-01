@@ -1,70 +1,82 @@
-import requests
-import json
-from zlapi import ZaloAPI
-from zlapi.models import Message, ThreadType
+import asyncio
+import os
+from playwright.async_api import async_playwright
 
-class CyberBot(ZaloAPI):
-    def __init__(self, cookie, imei, user_agent):
-        # Khởi tạo state thủ công
-        from zlapi._state import State
-        self._state = State()
-        self._state.user_agent = user_agent
-        self._state.imei = imei
-        self._state.set_cookies({"zpw_sek": cookie})
-        print(f"--- [SYSTEM] Đã nạp Cookie & IMEI vào hệ thống ---")
-
-    def get_uid_from_phone(self, phone):
-        """Tự xây dựng hàm tìm kiếm UID từ số điện thoại"""
-        url = "https://wapi.zalo.me/api/friend/search"
-        params = {"phone": phone, "avatarSize": 240, "grid_type": 1}
-        headers = {"User-Agent": self._state.user_agent}
-        cookies = self._state.get_cookies()
+async def send_zalo_no_timeout_final(phone, message):
+    async with async_playwright() as p:
+        profile_path = os.path.join(os.getcwd(), "zalo_user_data")
         
+        context = await p.chromium.launch_persistent_context(
+            profile_path,
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"],
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+        )
+        
+        page = context.pages[0] if context.pages else await context.new_page()
+        
+        # Vô hiệu hóa mọi giới hạn thời gian (Timeout = 0)
+        page.set_default_timeout(0)
+
         try:
-            response = requests.get(url, params=params, cookies=cookies, headers=headers)
-            data = response.json()
-            if data.get("error_code") == 0:
-                return data.get("data", {}).get("uid")
-        except Exception as e:
-            print(f"[!] Lỗi khi tìm UID: {e}")
-        return None
+            print(f"--- [SYSTEM] Đang nhắm mục tiêu: {phone} ---")
+            await page.goto(f"https://chat.zalo.me/?phone={phone}", timeout=0)
 
-    def send_message_to_phone(self, phone, text):
-        """Hàm chính để gửi tin nhắn cho khách hàng qua SĐT"""
-        uid = self.get_uid_from_phone(phone)
-        
-        if not uid or str(uid) == "0":
-            print(f"[FAIL] Không tìm thấy khách hàng dùng số: {phone}")
-            return
-
-        print(f"[SUCCESS] Đã tìm thấy khách hàng (UID: {uid})")
-        
-        # Thử các hàm gửi tin nhắn khả thi trong zlapi
-        msg = Message(text=text)
-        try:
-            # Ưu tiên dùng hàm send gốc nếu nó tồn tại ẩn
-            self.send(msg, thread_id=uid, thread_type=ThreadType.USER)
-            print(f"[DONE] Đã gửi thông điệp đến khách hàng {phone}")
-        except Exception:
+            # 1. TÌM VÀ NHẤP VÀO NÚT NHẮN TIN (Thẻ truncate)
+            print("[INFO] Đang tìm thẻ truncate 'Nhắn tin'...")
+            # Nhắm mục tiêu chính xác vào data-translate-inner="STR_CHAT"
+            btn_chat_selector = 'div[data-translate-inner="STR_CHAT"]'
+            
             try:
-                # Cách gửi thủ công qua endpoint nếu hàm send bị lỗi
-                print("[INFO] Đang thử phương thức gửi tin nhắn dự phòng...")
-                self.send_message(msg, thread_id=uid, thread_type=ThreadType.USER)
-                print(f"[DONE] Đã gửi thông điệp đến khách hàng {phone}")
+                # Đợi cho đến khi cái nút này xuất hiện (không giới hạn thời gian)
+                chat_btn = await page.wait_for_selector(btn_chat_selector, timeout=0)
+                if chat_btn:
+                    print("[PROCESS] Đã thấy nút 'Nhắn tin', đang click...")
+                    await chat_btn.click()
+                    # Chờ 2 giây để giao diện chat line_0 kịp render
+                    await asyncio.sleep(2)
             except Exception as e:
-                print(f"[CRITICAL] Không thể gửi tin nhắn: {e}")
+                print(f"[INFO] Bỏ qua bước click nút (Có thể đã vào thẳng chat): {e}")
 
-# --- CẤU HÌNH ---
-COOKIE = "s9AN.301690314.a0.gKVBIXtNG87NkhkGFDT0WMRr9Ue_xMBENxKop5650RLFjWJ9RPitmqUIBlDwwdsZOACYTWdedJ6Rrke0IBv0WG"
-IMEI = "efe7e642-36ff-42cd-ad73-7c20532bca63-2204ee63bef2f351470a66ffe1bb020e"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+            # 2. TẤN CÔNG VÀO DÒNG NHẬP LIỆU line_0
+            line_selector = "#input_line_0"
+            print(f"[INFO] Đang đợi mục tiêu line_0 xuất hiện...")
+            
+            # Đợi line_0 xuất hiện vĩnh viễn
+            target_line = await page.wait_for_selector(line_selector, timeout=0)
+            
+            # Đảm bảo phần tử được focus
+            await target_line.click()
+            
+            # Bơm dữ liệu bằng Script thực thi trực tiếp trên trình duyệt
+            await page.evaluate(f"""
+                (text) => {{
+                    const line = document.getElementById('input_line_0');
+                    if (line) {{
+                        line.innerText = text;
+                        // Kích hoạt phản ứng của hệ thống Zalo
+                        line.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    }}
+                }}
+            """, message)
+            
+            # Nhấn Enter để kết thúc nhiệm vụ
+            await page.keyboard.press("Enter")
+            
+            print(f"[SUCCESS] Dữ liệu đã truyền thành công đến {phone}")
+            
+            # Giữ lại 5s để xác nhận tin nhắn đã chuyển trạng thái "Đã gửi"
+            await asyncio.sleep(5)
 
-# Khởi chạy
-client = CyberBot(COOKIE, IMEI, UA)
+        except Exception as e:
+            print(f"[ERROR] Sự cố: {e}")
+            await page.screenshot(path="debug_truncate_error.png")
+        finally:
+            await context.close()
 
-# Danh sách khách hàng cần nhắn (Ví dụ)
-customers = ["0855427989"] 
-content = "Chào anh/chị, đây là thông báo tự động từ hệ thống chăm sóc khách hàng."
+# --- THÔNG SỐ TEST ---
+TARGET_PHONE = "0975678109"
+MESSAGE_TEXT = "Hệ thống CyberBot đã nhấp vào thẻ Truncate và gửi tin thành công!"
 
-for p in customers:
-    client.send_message_to_phone(p, content)
+if __name__ == "__main__":
+    asyncio.run(send_zalo_no_timeout_final(TARGET_PHONE, MESSAGE_TEXT))

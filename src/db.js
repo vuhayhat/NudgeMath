@@ -56,11 +56,13 @@ export async function ensureSchema() {
       locked BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE classes ADD COLUMN IF NOT EXISTS zalo_group_url TEXT;
 
     ALTER TABLE students ADD COLUMN IF NOT EXISTS username TEXT;
     ALTER TABLE students ADD COLUMN IF NOT EXISTS class_id INT REFERENCES classes(id) ON DELETE SET NULL;
     ALTER TABLE students ADD COLUMN IF NOT EXISTS streak INT DEFAULT 0;
     ALTER TABLE students ADD COLUMN IF NOT EXISTS stars INT DEFAULT 0;
+    ALTER TABLE students ADD COLUMN IF NOT EXISTS phone TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS students_username_uq ON students(username);
 
     CREATE TABLE IF NOT EXISTS exercises (
@@ -182,5 +184,20 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS surveys_class_week_uq ON surveys(class_id, week_start);
+    
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+    
+    CREATE TABLE IF NOT EXISTS zalo_logs (
+      id SERIAL PRIMARY KEY,
+      student_id INT REFERENCES students(id) ON DELETE SET NULL,
+      phone TEXT,
+      content TEXT NOT NULL,
+      success BOOLEAN DEFAULT FALSE,
+      error TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `)
 }

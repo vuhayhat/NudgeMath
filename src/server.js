@@ -199,6 +199,32 @@ function resolvePdfFont() {
   return null
 }
 
+const configDir = path.join(__dirname, '..', 'config')
+const zaloMapPath = path.join(configDir, 'zalo_groups.json')
+function readZaloGroups() {
+  try {
+    const s = fs.readFileSync(zaloMapPath, 'utf8')
+    const j = JSON.parse(s || '{}')
+    return typeof j === 'object' && j ? j : {}
+  } catch {
+    return {}
+  }
+}
+function writeZaloGroups(map) {
+  try { fs.mkdirSync(configDir, { recursive: true }) } catch {}
+  fs.writeFileSync(zaloMapPath, JSON.stringify(map || {}, null, 2), 'utf8')
+}
+function getClassGroupUrl(classId) {
+  const m = readZaloGroups()
+  return m[String(classId)] || null
+}
+function setClassGroupUrl(classId, url) {
+  const m = readZaloGroups()
+  if (url && url.trim()) m[String(classId)] = url.trim()
+  else delete m[String(classId)]
+  writeZaloGroups(m)
+}
+
 async function safeFetch(url, options = {}) {
   if (typeof globalThis.fetch === 'function') return globalThis.fetch(url, options)
   return new Promise((resolve, reject) => {
@@ -300,6 +326,7 @@ app.post('/admin/exercises/new/manual', upload.array('images', 10), async (req, 
       const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
       await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [parseInt(class_id, 10), exId, dueAtStr])
     }
+    await notifyZaloAssignment(parseInt(class_id, 10), exId)
   }
   res.redirect('/admin/exercises')
 })
@@ -358,6 +385,182 @@ function computeAutoNudge(e, selected, isCorrect) {
   return { nudge, sticker, stars, streak_delta }
 }
 
+async function getSetting(key) {
+  if (!usePg) return null
+  const r = await pool.query('SELECT value FROM system_settings WHERE key=$1', [key])
+  return r.rows[0]?.value || null
+}
+
+async function setSetting(key, value) {
+  if (!usePg) return
+  await pool.query('INSERT INTO system_settings(key, value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value', [key, value])
+}
+
+async function sendZaloMessage(groupUrl, message) {
+  try {
+    if (!groupUrl || !message) return false
+    const { chromium } = await import('playwright')
+    const profileDir = path.join(__dirname, '..', 'zalo_user_data')
+    try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+    const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+    const context = await chromium.launchPersistentContext(profileDir, {
+      headless: false,
+      args: ['--disable-blink-features=AutomationControlled'],
+      userAgent: ua
+    })
+    const page = context.pages[0] || await context.newPage()
+    page.setDefaultTimeout(0)
+    const cookieStr = await getSetting('zalo_cookies')
+    if (cookieStr && cookieStr.trim()) {
+      const pairs = cookieStr.split(';').map(s => s.trim()).filter(s => s.includes('='))
+      const ignore = new Set(['path','domain','expires','max-age','secure','httponly','samesite'])
+      const baseCookies = []
+      for (const kv of pairs) {
+        const idx = kv.indexOf('=')
+        const name = kv.slice(0, idx).trim()
+        const value = kv.slice(idx + 1).trim()
+        if (!name || ignore.has(name.toLowerCase())) continue
+        baseCookies.push({ name, value })
+      }
+      const domains = ['zalo.me', 'chat.zalo.me', 'wapi.zalo.me']
+      const cookies = []
+      for (const d of domains) {
+        for (const c of baseCookies) {
+          cookies.push({ name: c.name, value: c.value, domain: d, path: '/', secure: true })
+        }
+      }
+      if (cookies.length) {
+        await context.addCookies(cookies)
+      }
+    }
+    const m = String(groupUrl || '').match(/g\/([a-z0-9]+)/i)
+    const directUrl = m ? `https://chat.zalo.me/?g=${m[1]}` : groupUrl
+    await page.goto(directUrl, { timeout: 0 })
+    await new Promise(r => setTimeout(r, 5000))
+    const target = await page.waitForSelector('#input_line_0', { timeout: 0 })
+    if (target) {
+      await target.click()
+      await page.evaluate((text) => {
+        const line = document.getElementById('input_line_0')
+        if (line) {
+          line.focus()
+          line.innerText = text
+          line.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+      }, message)
+      await page.keyboard.press('Enter')
+    }
+    await context.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function sendZaloToStudent(phone, message) {
+  try {
+    if (!phone || !message) return false
+    const { chromium } = await import('playwright')
+    const profileDir = path.join(__dirname, '..', 'zalo_user_data')
+    try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+    const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+    const context = await chromium.launchPersistentContext(profileDir, {
+      headless: false,
+      args: ['--disable-blink-features=AutomationControlled'],
+      userAgent: ua
+    })
+    const page = context.pages[0] || await context.newPage()
+    page.setDefaultTimeout(0)
+    const cookieStr = await getSetting('zalo_cookies')
+    if (cookieStr && cookieStr.trim()) {
+      const pairs = cookieStr.split(';').map(s => s.trim()).filter(s => s.includes('='))
+      const ignore = new Set(['path','domain','expires','max-age','secure','httponly','samesite'])
+      const baseCookies = []
+      for (const kv of pairs) {
+        const idx = kv.indexOf('=')
+        const name = kv.slice(0, idx).trim()
+        const value = kv.slice(idx + 1).trim()
+        if (!name || ignore.has(name.toLowerCase())) continue
+        baseCookies.push({ name, value })
+      }
+      const domains = ['zalo.me', 'chat.zalo.me', 'wapi.zalo.me']
+      const cookies = []
+      for (const d of domains) {
+        for (const c of baseCookies) {
+          cookies.push({ name: c.name, value: c.value, domain: d, path: '/', secure: true })
+        }
+      }
+      if (cookies.length) {
+        await context.addCookies(cookies)
+      }
+    }
+    const url = `https://chat.zalo.me/?phone=${encodeURIComponent(String(phone))}`
+    await page.goto(url, { timeout: 0 })
+    try { await page.screenshot({ path: path.join(__dirname, '..', 'zalo_full_screen.png'), fullPage: true }) } catch {}
+    try {
+      const chatBtn = await page.waitForSelector('div[data-translate-inner=\"STR_CHAT\"]', { timeout: 0 })
+      if (chatBtn) {
+        await chatBtn.click()
+        await new Promise(r => setTimeout(r, 2000))
+      }
+    } catch {}
+    const target = await page.waitForSelector('#input_line_0', { timeout: 0 })
+    if (target) {
+      await target.click()
+      await page.evaluate((text) => {
+        const line = document.getElementById('input_line_0')
+        if (line) {
+          line.innerText = text
+          line.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+      }, message)
+      await page.keyboard.press('Enter')
+    }
+    await new Promise(r => setTimeout(r, 3000))
+    await context.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function logZaloSend(studentId, phone, content, success, error) {
+  try {
+    if (!usePg) return
+    await pool.query('INSERT INTO zalo_logs (student_id, phone, content, success, error) VALUES ($1,$2,$3,$4,$5)', [studentId || null, phone || null, content || '', !!success, error || null])
+  } catch {}
+}
+
+async function notifyZaloAssignment(classId, exerciseId) {
+  try {
+    const c = await pool.query('SELECT name FROM classes WHERE id=$1', [classId])
+    const cls = c.rows[0]
+    if (!cls) return
+    const e = await pool.query('SELECT title FROM exercises WHERE id=$1', [exerciseId])
+    const ex = e.rows[0]
+    const a = await pool.query('SELECT due_at FROM assignments WHERE class_id=$1 AND exercise_id=$2 ORDER BY id DESC LIMIT 1', [classId, exerciseId])
+    const dueAt = a.rows[0]?.due_at || null
+    const title = ex?.title || `Bài ${exerciseId}`
+    const dueTxt = dueAt ? ` · Hết hạn: ${new Date(dueAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}` : ''
+    const msg = `Thông báo: Đã giao bài "${title}" cho lớp ${cls.name}${dueTxt}. Vào NudgeMath để làm bài.`
+    const phonesQ = await pool.query('SELECT id, phone FROM students WHERE class_id=$1 AND phone IS NOT NULL AND phone<>\'\'', [classId])
+    for (const r of phonesQ.rows) {
+      const p = r.phone
+      const sid = r.id
+      if (p) {
+        let ok = false
+        let err = null
+        try {
+          ok = await sendZaloToStudent(p, msg)
+        } catch (e) {
+          ok = false
+          err = String(e && e.message ? e.message : e || '')
+        }
+        await logZaloSend(sid, p, msg, ok, err)
+      }
+    }
+  } catch {}
+}
 async function generateAIQuestionGemini(grade, difficulty, topic, images = []) {
   const apiKey = process.env.GEMINI_API_KEY
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
@@ -458,6 +661,7 @@ app.post('/admin/exercises/new/ai', upload.array('images', 10), async (req, res)
       const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
       await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [parseInt(class_id, 10), exId, dueAtStr])
     }
+    await notifyZaloAssignment(parseInt(class_id, 10), exId)
   }
   res.redirect('/admin/exercises?ai=done')
 })
@@ -535,6 +739,94 @@ app.get('/admin/classes/:id', async (req, res) => {
   res.render('admin_class_detail', { cls: cls.rows[0], students: students.rows, assignments: assignments.rows })
 })
 
+app.get('/admin/messaging', async (req, res) => {
+  if (!usePg) return res.render('admin_messaging', { zalo_cookies: '', zalo_user_agent: '', logs: [], qrImageExists: false, classes: [], students: [], selectedClassId: '', selectedStudentId: '' })
+  const c = await pool.query('SELECT key, value FROM system_settings WHERE key IN ($1,$2)', ['zalo_cookies', 'zalo_user_agent'])
+  const m = {}
+  for (const r of c.rows) m[r.key] = r.value
+  const classId = req.query.class_id ? parseInt(req.query.class_id, 10) : null
+  const studentId = req.query.student_id ? parseInt(req.query.student_id, 10) : null
+  let logsQ
+  if (studentId) {
+    logsQ = await pool.query('SELECT l.id, l.student_id, l.phone, l.content, l.success, l.error, l.created_at, s.name AS student_name, s.username FROM zalo_logs l LEFT JOIN students s ON s.id=l.student_id WHERE l.student_id=$1 ORDER BY l.id DESC LIMIT 100', [studentId])
+  } else if (classId) {
+    logsQ = await pool.query('SELECT l.id, l.student_id, l.phone, l.content, l.success, l.error, l.created_at, s.name AS student_name, s.username FROM zalo_logs l LEFT JOIN students s ON s.id=l.student_id WHERE s.class_id=$1 ORDER BY l.id DESC LIMIT 100', [classId])
+  } else {
+    logsQ = await pool.query('SELECT l.id, l.student_id, l.phone, l.content, l.success, l.error, l.created_at, s.name AS student_name, s.username FROM zalo_logs l LEFT JOIN students s ON s.id=l.student_id ORDER BY l.id DESC LIMIT 100')
+  }
+  const classes = await pool.query('SELECT id, name FROM classes ORDER BY name ASC')
+  let students
+  if (classId) {
+    students = await pool.query('SELECT id, name, username FROM students WHERE class_id=$1 ORDER BY id DESC', [classId])
+  } else {
+    students = await pool.query('SELECT id, name, username FROM students ORDER BY id DESC LIMIT 200')
+  }
+  let qrImageExists = false
+  try {
+    const p = path.join(__dirname, '..', 'public', 'zalo_login.png')
+    qrImageExists = fs.existsSync(p)
+  } catch {}
+  res.render('admin_messaging', { zalo_cookies: m['zalo_cookies'] || '', zalo_user_agent: m['zalo_user_agent'] || '', logs: logsQ.rows, qrImageExists, classes: classes.rows, students: students.rows, selectedClassId: req.query.class_id || '', selectedStudentId: req.query.student_id || '' })
+})
+
+app.post('/admin/messaging', async (req, res) => {
+  if (!usePg) return res.redirect('/admin')
+  const { zalo_cookies, zalo_user_agent } = req.body
+  await setSetting('zalo_cookies', (zalo_cookies || '').trim())
+  await setSetting('zalo_user_agent', (zalo_user_agent || '').trim())
+  res.redirect('/admin/messaging')
+})
+
+app.post('/admin/messaging/qr', async (req, res) => {
+  if (!usePg) return res.redirect('/admin/messaging')
+  try {
+    const { chromium } = await import('playwright')
+    const profileDir = path.join(__dirname, '..', 'zalo_user_data')
+    try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+    const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+    const context = await chromium.launchPersistentContext(profileDir, {
+      headless: false,
+      args: ['--disable-blink-features=AutomationControlled'],
+      userAgent: ua
+    })
+    const page = context.pages[0] || await context.newPage()
+    page.setDefaultTimeout(0)
+    const phone = (req.body.phone || '').trim()
+    const url = phone ? `https://chat.zalo.me/?phone=${encodeURIComponent(phone)}` : 'https://chat.zalo.me/'
+    await page.goto(url, { timeout: 0 })
+    const outPath = path.join(__dirname, '..', 'public', 'zalo_login.png')
+    try { await page.screenshot({ path: outPath, fullPage: true }) } catch {}
+    await new Promise(r => setTimeout(r, 2000))
+    await context.close()
+  } catch {}
+  res.redirect('/admin/messaging')
+})
+
+app.post('/admin/messaging/login', (req, res) => {
+  if (!usePg) return res.redirect('/admin/messaging')
+  ;(async () => {
+    try {
+      const { chromium } = await import('playwright')
+      const profileDir = path.join(__dirname, '..', 'zalo_user_data')
+      try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+      const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+      const context = await chromium.launchPersistentContext(profileDir, {
+        headless: false,
+        args: ['--disable-blink-features=AutomationControlled'],
+        userAgent: ua
+      })
+      const page = context.pages[0] || await context.newPage()
+      page.setDefaultTimeout(0)
+      await page.goto('https://chat.zalo.me/', { timeout: 0 })
+      const outPath = path.join(__dirname, '..', 'public', 'zalo_login.png')
+      try { await page.screenshot({ path: outPath, fullPage: true }) } catch {}
+      await new Promise(r => setTimeout(r, 60000))
+      try { await page.screenshot({ path: outPath, fullPage: true }) } catch {}
+      await context.close()
+    } catch {}
+  })()
+  res.redirect('/admin/messaging')
+})
 app.post('/admin/classes/:id/rename', async (req, res) => {
   if (!usePg) return res.redirect('/admin/classes')
   const id = parseInt(req.params.id, 10)
@@ -542,6 +834,7 @@ app.post('/admin/classes/:id/rename', async (req, res) => {
   await pool.query('UPDATE classes SET name=$1 WHERE id=$2', [name, id])
   res.redirect(`/admin/classes/${id}`)
 })
+
 
 app.post('/admin/classes/:id/lock', async (req, res) => {
   if (!usePg) return res.redirect('/admin/classes')
@@ -589,12 +882,12 @@ function genPassword() {
 
 app.post('/admin/students', async (req, res) => {
   if (!usePg) return res.redirect('/admin/students')
-  const { name, class_id, password: passwordInput } = req.body
+  const { name, class_id, password: passwordInput, phone } = req.body
   const base = slugifyName(name || 'hs')
   const username = await genUniqueUsername(base || 'hs')
   const password = (passwordInput && passwordInput.trim()) ? passwordInput.trim() : genPassword()
   const hash = await bcrypt.hash(password, 10)
-  await pool.query('INSERT INTO students (username, password_hash, name, class_id) VALUES ($1, $2, $3, $4)', [username, hash, name, class_id ? parseInt(class_id, 10) : null])
+  await pool.query('INSERT INTO students (username, password_hash, name, class_id, phone) VALUES ($1, $2, $3, $4, $5)', [username, hash, name, class_id ? parseInt(class_id, 10) : null, (phone && phone.trim()) ? phone.trim() : null])
   res.redirect(`/admin/students?user=${encodeURIComponent(username)}&pass=${encodeURIComponent(password)}`)
 })
 
@@ -617,6 +910,13 @@ app.post('/admin/students/:id/reset', async (req, res) => {
   res.redirect(`/admin/students?user=${encodeURIComponent(u)}&pass=${encodeURIComponent(password)}`)
 })
 
+app.post('/admin/students/:id/phone', async (req, res) => {
+  if (!usePg) return res.redirect('/admin/students')
+  const id = parseInt(req.params.id, 10)
+  const p = (req.body.phone || '').trim()
+  await pool.query('UPDATE students SET phone=$1 WHERE id=$2', [p || null, id])
+  res.redirect('/admin/students')
+})
 app.post('/admin/exercises', async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
   const { title, description } = req.body
@@ -632,6 +932,7 @@ app.post('/admin/exercises/:id/assign', async (req, res) => {
   if (!class_id) return res.redirect('/admin/exercises')
   const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
   await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1, $2, $3)', [parseInt(class_id, 10), id, dueAtStr])
+  await notifyZaloAssignment(parseInt(class_id, 10), id)
   res.redirect('/admin/exercises')
 })
 
@@ -1435,6 +1736,7 @@ app.post('/admin/plans/:id/generate', async (req, res) => {
         const created = await pool.query(q, [title, null, 'ai', gen.question, gen.opts.A, gen.opts.B, gen.opts.C, gen.opts.D, gen.answer, gen.explains.A, gen.explains.B, gen.explains.C, gen.explains.D, gen.solution, grade_level, diff || null, top])
         const exId = created.rows[0].id
         await pool.query('INSERT INTO assignments (class_id, exercise_id, assigned_at) VALUES ($1,$2,$3)', [plan.class_id, exId, due || new Date()])
+        await notifyZaloAssignment(plan.class_id, exId)
         ok++
       } catch (e) {
         fail++

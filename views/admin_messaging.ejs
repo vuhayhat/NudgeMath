@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cấu hình nhắn tin</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/"><img class="logo" src="/logo.svg" alt="">NudgeMath</a>
+    <nav class="nav">
+      <a href="/admin">Trang Quản Trị</a>
+    </nav>
+  </header>
+  <div class="container">
+    <div class="card">
+      <h1>Cấu hình nhắn tin Zalo</h1>
+      <form class="form" method="POST" action="/admin/messaging">
+        <label for="zalo_cookies">Cookie Zalo (chuỗi name=value; ...)</label>
+        <textarea class="input" id="zalo_cookies" name="zalo_cookies" rows="4" placeholder="vd: zbrowserid=...; zsession=..."><%= zalo_cookies || '' %></textarea>
+        <label for="zalo_user_agent">User-Agent (tùy chọn)</label>
+        <input class="input" id="zalo_user_agent" type="text" name="zalo_user_agent" placeholder="Chuỗi UA trình duyệt" value="<%= zalo_user_agent || '' %>" />
+        <button class="btn btn-primary" type="submit">Lưu cấu hình</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Login Zalo lần đầu</h2>
+      <form class="form" method="POST" action="/admin/messaging/login">
+        <button class="btn btn-primary" type="submit">Mở trình duyệt để đăng nhập</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Chụp mã QR đăng nhập Zalo</h2>
+      <form class="form" method="POST" action="/admin/messaging/qr" style="grid-template-columns: 1fr auto;">
+        <input class="input" type="text" name="phone" placeholder="Số điện thoại Zalo (tùy chọn)" />
+        <button class="btn btn-primary" type="submit">Chụp màn hình mã QR</button>
+      </form>
+      <% if (qrImageExists) { %>
+        <div style="margin-top:12px">
+          <img src="/zalo_login.png" alt="QR đăng nhập Zalo" style="max-width:100%; border:1px solid #ddd; border-radius:8px" />
+        </div>
+      <% } %>
+    </div>
+    <div class="card">
+      <h2>Lịch sử gửi thông báo cho học sinh</h2>
+      <form class="form" method="GET" action="/admin/messaging" style="grid-template-columns: 1fr 1fr auto auto;">
+        <select class="input" name="class_id">
+          <option value="">Tất cả lớp</option>
+          <% (classes || []).forEach(c => { %>
+            <option value="<%= c.id %>" <%= String(selectedClassId||'')===String(c.id)?'selected':'' %>><%= c.name %></option>
+          <% }) %>
+        </select>
+        <select class="input" name="student_id">
+          <option value="">Tất cả học sinh</option>
+          <% (students || []).forEach(s => { %>
+            <option value="<%= s.id %>" <%= String(selectedStudentId||'')===String(s.id)?'selected':'' %>><%= s.name %> (<%= s.username %>)</option>
+          <% }) %>
+        </select>
+        <button class="btn btn-outline" type="submit">Lọc</button>
+        <% if (selectedClassId || selectedStudentId) { %>
+          <a class="btn btn-outline" href="/admin/messaging">Bỏ lọc</a>
+        <% } %>
+      </form>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Học sinh</th>
+            <th>Username</th>
+            <th>Điện thoại</th>
+            <th>Nội dung</th>
+            <th>Trạng thái</th>
+            <th>Lỗi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (logs || []).forEach(l => { %>
+            <tr>
+              <td><%= new Date(l.created_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %></td>
+              <td><%= l.student_name || '-' %></td>
+              <td><%= l.username || '-' %></td>
+              <td><%= l.phone || '-' %></td>
+              <td><%= l.content %></td>
+              <td><%= l.success ? 'Thành công' : 'Thất bại' %></td>
+              <td><%= l.error || '' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
