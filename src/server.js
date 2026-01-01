@@ -162,6 +162,10 @@ async function maybeSeedStudent() {
 
 const port = process.env.PORT || 3000
 let lastGeminiCall = 0
+function toInt(val) {
+  const n = parseInt(val, 10)
+  return Number.isFinite(n) ? n : null
+}
 const NUDGE_TONE = (process.env.NUDGE_TONE || 'gentle').toLowerCase()
 const NUDGE_POLICY = {
   difficultyStars: { easy: 1, medium: 2, hard: 3 },
@@ -297,7 +301,8 @@ app.get('/admin/exercises', async (req, res) => {
 
 app.get('/admin/exercises/:id', async (req, res) => {
   if (!usePg) return res.render('admin_exercise_detail', { ex: null })
-  const id = parseInt(req.params.id, 10)
+  const id = toInt(req.params.id)
+  if (id == null) return res.redirect('/admin/exercises')
   const ex = await pool.query('SELECT * FROM exercises WHERE id=$1', [id])
   res.render('admin_exercise_detail', { ex: ex.rows[0] })
 })
@@ -319,14 +324,15 @@ app.post('/admin/exercises/new/manual', upload.array('images', 10), async (req, 
   const created = await pool.query(q, [title, null, 'manual', question, opt_a, opt_b, opt_c, opt_d, answer, topic || null, images.length ? images : null])
   const exId = created.rows[0].id
   if (class_id) {
+    const cid = toInt(class_id)
     const h = due_hours ? parseInt(due_hours, 10) : null
     if (h && h > 0) {
-      await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2, NOW() + make_interval(hours => $3))', [parseInt(class_id, 10), exId, h])
+      if (cid != null) await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2, NOW() + make_interval(hours => $3))', [cid, exId, h])
     } else {
       const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
-      await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [parseInt(class_id, 10), exId, dueAtStr])
+      if (cid != null) await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1,$2,$3)', [cid, exId, dueAtStr])
     }
-    await notifyZaloAssignment(parseInt(class_id, 10), exId)
+    if (cid != null) await notifyZaloAssignment(cid, exId)
   }
   res.redirect('/admin/exercises')
 })
@@ -754,7 +760,8 @@ app.post('/admin/classes', async (req, res) => {
 
 app.get('/admin/classes/:id', async (req, res) => {
   if (!usePg) return res.render('admin_class_detail', { cls: null, students: [], assignments: [] })
-  const id = parseInt(req.params.id, 10)
+  const id = toInt(req.params.id)
+  if (id == null) return res.redirect('/admin/classes')
   const cls = await pool.query('SELECT * FROM classes WHERE id=$1', [id])
   const students = await pool.query('SELECT * FROM students WHERE class_id=$1 ORDER BY id DESC', [id])
   const assignments = await pool.query('SELECT a.*, e.title FROM assignments a JOIN exercises e ON e.id=a.exercise_id WHERE a.class_id=$1 ORDER BY a.id DESC', [id])
@@ -849,6 +856,7 @@ app.post('/admin/messaging/login', (req, res) => {
       const { chromium } = await import('playwright')
       const profileDir = path.join(__dirname, '..', 'zalo_user_data')
       try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+      try { fs.mkdirSync(path.join(__dirname, '..', 'public'), { recursive: true }) } catch {}
       const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
       const context = await chromium.launchPersistentContext(profileDir, {
         headless: false,
@@ -857,11 +865,20 @@ app.post('/admin/messaging/login', (req, res) => {
       })
       const page = context.pages[0] || await context.newPage()
       page.setDefaultTimeout(0)
-      await page.goto('https://chat.zalo.me/', { timeout: 0 })
-      const outPath = path.join(__dirname, '..', 'public', 'zalo_login.png')
-      try { await page.screenshot({ path: outPath, fullPage: true }) } catch {}
+      try { await page.setViewportSize({ width: 1080, height: 1920 }) } catch {}
+      await page.goto('https://id.zalo.me/', { timeout: 0 })
+      const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
+      try {
+        await page.screenshot({ path: base, fullPage: true })
+        await page.screenshot({ path: hist, fullPage: true })
+      } catch {}
       await new Promise(r => setTimeout(r, 60000))
-      try { await page.screenshot({ path: outPath, fullPage: true }) } catch {}
+      try {
+        await page.screenshot({ path: base, fullPage: true })
+        await page.screenshot({ path: hist, fullPage: true })
+      } catch {}
       await context.close()
     } catch {}
   })()
@@ -967,12 +984,14 @@ app.post('/admin/exercises', async (req, res) => {
 
 app.post('/admin/exercises/:id/assign', async (req, res) => {
   if (!usePg) return res.redirect('/admin/exercises')
-  const id = parseInt(req.params.id, 10)
+  const id = toInt(req.params.id)
   const { class_id, due_at } = req.body
-  if (!class_id) return res.redirect('/admin/exercises')
+  if (id == null || !class_id) return res.redirect('/admin/exercises')
+  const cid = toInt(class_id)
+  if (cid == null) return res.redirect('/admin/exercises')
   const dueAtStr = (due_at && due_at.trim()) ? `${due_at.trim()}:00+07:00` : null
-  await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1, $2, $3)', [parseInt(class_id, 10), id, dueAtStr])
-  await notifyZaloAssignment(parseInt(class_id, 10), id)
+  await pool.query('INSERT INTO assignments (class_id, exercise_id, due_at) VALUES ($1, $2, $3)', [cid, id, dueAtStr])
+  await notifyZaloAssignment(cid, id)
   res.redirect('/admin/exercises')
 })
 

@@ -1,6 +1,23 @@
-2026/01/01-15:01:10.676 6328 Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/MANIFEST-000001
-2026/01/01-15:01:10.676 6328 Recovering log #41
-2026/01/01-15:01:10.713 6328 Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/000041.log 
-2026/01/01-15:01:17.462 6328 Level-0 table #47: started
-2026/01/01-15:01:17.481 6328 Level-0 table #47: 1361452 bytes OK
-2026/01/01-15:01:17.482 6328 Delete type=0 #41
+2026/01/01-17:12:10.641 507c Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/01-17:12:10.641 507c Recovering log #46
+2026/01/01-17:12:10.642 507c Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/000046.log 
+2026/01/01-17:12:10.925 507c Compacting 1@1 + 2@2 files
+2026/01/01-17:12:10.953 507c Generated table #49@1: 11720 keys, 2143281 bytes
+2026/01/01-17:12:10.983 507c Generated table #50@1: 43518 keys, 1908783 bytes
+2026/01/01-17:12:10.983 507c Compacted 1@1 + 2@2 files => 4052064 bytes
+2026/01/01-17:12:10.984 507c compacted to: files[ 0 0 2 0 0 0 0 ]
+2026/01/01-17:12:10.984 507c Delete type=2 #43
+2026/01/01-17:12:10.984 507c Delete type=2 #44
+2026/01/01-17:12:10.984 507c Delete type=2 #47
+2026/01/01-17:12:17.410 507c Level-0 table #52: started
+2026/01/01-17:12:17.429 507c Level-0 table #52: 1365146 bytes OK
+2026/01/01-17:12:17.430 507c Delete type=0 #46
+2026/01/01-17:12:17.431 507c Compacting 1@1 + 2@2 files
+2026/01/01-17:12:17.460 507c Generated table #53@1: 14263 keys, 2144708 bytes
+2026/01/01-17:12:17.494 507c Generated table #54@1: 50443 keys, 2206133 bytes
+2026/01/01-17:12:17.499 507c Generated table #55@1: 741 keys, 183413 bytes
+2026/01/01-17:12:17.499 507c Compacted 1@1 + 2@2 files => 4534254 bytes
+2026/01/01-17:12:17.500 507c compacted to: files[ 0 0 3 0 0 0 0 ]
+2026/01/01-17:12:17.500 507c Delete type=2 #49
+2026/01/01-17:12:17.500 507c Delete type=2 #50
+2026/01/01-17:12:17.500 507c Delete type=2 #52
