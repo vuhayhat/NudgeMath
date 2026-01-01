@@ -463,6 +463,7 @@ async function sendZaloToStudent(phone, message) {
     const { chromium } = await import('playwright')
     const profileDir = path.join(__dirname, '..', 'zalo_user_data')
     try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+    try { fs.mkdirSync(path.join(__dirname, '..', 'public'), { recursive: true }) } catch {}
     const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
     const context = await chromium.launchPersistentContext(profileDir, {
       headless: false,
@@ -498,13 +499,18 @@ async function sendZaloToStudent(phone, message) {
     await page.goto(url, { timeout: 0 })
     try { await page.screenshot({ path: path.join(__dirname, '..', 'zalo_full_screen.png'), fullPage: true }) } catch {}
     try {
-      const chatBtn = await page.waitForSelector('div[data-translate-inner=\"STR_CHAT\"]', { timeout: 0 })
+      const chatBtn = await page.waitForSelector('div[data-translate-inner=\"STR_CHAT\"]', { timeout: 5000 })
       if (chatBtn) {
         await chatBtn.click()
         await new Promise(r => setTimeout(r, 2000))
       }
     } catch {}
-    const target = await page.waitForSelector('#input_line_0', { timeout: 0 })
+    const target = await page.waitForSelector('#input_line_0', { timeout: 10000 }).catch(() => null)
+    if (!target) {
+      try { await page.screenshot({ path: path.join(__dirname, '..', 'public', 'zalo_login.png'), fullPage: true }) } catch {}
+      await context.close()
+      return false
+    }
     if (target) {
       await target.click()
       await page.evaluate((text) => {
@@ -552,6 +558,9 @@ async function notifyZaloAssignment(classId, exerciseId) {
         let err = null
         try {
           ok = await sendZaloToStudent(p, msg)
+          if (!ok) {
+            err = 'Timeout 10s hoặc chưa đăng nhập — đã chụp QR'
+          }
         } catch (e) {
           ok = false
           err = String(e && e.message ? e.message : e || '')
