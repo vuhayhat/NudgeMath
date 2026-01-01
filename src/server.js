@@ -505,6 +505,13 @@ async function sendZaloToStudent(phone, message) {
     const url = `https://chat.zalo.me/?phone=${encodeURIComponent(String(phone))}`
     await page.goto(url, { timeout: 0 })
     try {
+      const fullBase = path.join(__dirname, '..', 'public', 'zalo_full_screen.png')
+      const tsFull = new Date().toISOString().replace(/[:.]/g, '-')
+      const fullHist = path.join(__dirname, '..', 'public', `zalo_full_screen_${tsFull}.png`)
+      await page.screenshot({ path: fullBase, fullPage: true })
+      await page.screenshot({ path: fullHist, fullPage: true })
+    } catch {}
+    try {
       const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
       const ts = new Date().toISOString().replace(/[:.]/g, '-')
       const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
@@ -542,6 +549,13 @@ async function sendZaloToStudent(phone, message) {
       await page.keyboard.press('Enter')
     }
     await new Promise(r => setTimeout(r, 3000))
+    try {
+      const fullBaseAfter = path.join(__dirname, '..', 'public', 'zalo_full_screen.png')
+      const tsFullAfter = new Date().toISOString().replace(/[:.]/g, '-')
+      const fullHistAfter = path.join(__dirname, '..', 'public', `zalo_full_screen_${tsFullAfter}.png`)
+      await page.screenshot({ path: fullBaseAfter, fullPage: true })
+      await page.screenshot({ path: fullHistAfter, fullPage: true })
+    } catch {}
     await context.close()
     return true
   } catch {
@@ -554,6 +568,43 @@ async function logZaloSend(studentId, phone, content, success, error) {
     if (!usePg) return
     await pool.query('INSERT INTO zalo_logs (student_id, phone, content, success, error) VALUES ($1,$2,$3,$4,$5)', [studentId || null, phone || null, content || '', !!success, error || null])
   } catch {}
+}
+
+async function checkZaloLoginStatus() {
+  try {
+    const { chromium } = await import('playwright')
+    const profileDir = path.join(__dirname, '..', 'zalo_user_data')
+    try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+    try { fs.mkdirSync(path.join(__dirname, '..', 'public'), { recursive: true }) } catch {}
+    const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+    const context = await chromium.launchPersistentContext(profileDir, {
+      headless: true,
+      args: ['--disable-blink-features=AutomationControlled'],
+      userAgent: ua
+    })
+    const page = context.pages[0] || await context.newPage()
+    page.setDefaultTimeout(0)
+    try { await page.setViewportSize({ width: 1080, height: 1920 }) } catch {}
+    await page.goto('https://chat.zalo.me/', { timeout: 0 })
+    let loggedIn = false
+    try {
+      await page.waitForSelector('#input_line_0', { timeout: 5000 })
+      loggedIn = true
+    } catch {
+      loggedIn = false
+      try {
+        const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
+        const ts = new Date().toISOString().replace(/[:.]/g, '-')
+        const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
+        await page.screenshot({ path: base, fullPage: true })
+        await page.screenshot({ path: hist, fullPage: true })
+      } catch {}
+    }
+    await context.close()
+    return loggedIn
+  } catch {
+    return null
+  }
 }
 
 async function notifyZaloAssignment(classId, exerciseId) {
@@ -807,7 +858,100 @@ app.get('/admin/messaging', async (req, res) => {
     }).sort((a,b) => b.t - a.t).slice(0, 8).map(x => x.f)
     qrImages = withStat
   } catch {}
-  res.render('admin_messaging', { zalo_cookies: m['zalo_cookies'] || '', zalo_user_agent: m['zalo_user_agent'] || '', logs: logsQ.rows, qrImageExists, qrImages, classes: classes.rows, students: students.rows, selectedClassId: req.query.class_id || '', selectedStudentId: req.query.student_id || '' })
+  let zaloLoggedIn = null
+  let zaloStatusCheckedAt = null
+  try {
+    zaloLoggedIn = await checkZaloLoginStatus()
+    zaloStatusCheckedAt = new Date()
+  } catch {}
+  let fsImageExists = false
+  let fsImages = []
+  try {
+    const full = path.join(__dirname, '..', 'public', 'zalo_full_screen.png')
+    fsImageExists = fs.existsSync(full)
+    const pub = path.join(__dirname, '..', 'public')
+    const all = fs.readdirSync(pub).filter(f => f.startsWith('zalo_full_screen_') && f.endsWith('.png'))
+    const withStat = all.map(f => {
+      try {
+        const s = fs.statSync(path.join(pub, f))
+        return { f, t: s.mtimeMs }
+      } catch {
+        return { f, t: 0 }
+      }
+    }).sort((a,b) => b.t - a.t).slice(0, 8).map(x => x.f)
+    fsImages = withStat
+  } catch {}
+  res.render('admin_messaging', {
+    zalo_cookies: m['zalo_cookies'] || '',
+    zalo_user_agent: m['zalo_user_agent'] || '',
+    logs: logsQ.rows,
+    qrImageExists,
+    qrImages,
+    fsImageExists,
+    fsImages,
+    classes: classes.rows,
+    students: students.rows,
+    selectedClassId: req.query.class_id || '',
+    selectedStudentId: req.query.student_id || '',
+    zalo_logged_in: zaloLoggedIn,
+    zalo_status_checked_at: zaloStatusCheckedAt
+  })
+})
+
+app.get('/admin/messaging/qr/live', (req, res) => {
+  if (!usePg) return res.end()
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  try { res.flushHeaders() } catch {}
+  let closing = false
+  const send = (event, data) => {
+    try {
+      res.write(`event: ${event}\n`)
+      res.write(`data: ${JSON.stringify(data)}\n\n`)
+    } catch {}
+  }
+  ;(async () => {
+    try {
+      send('status', { msg: 'Khởi tạo trình duyệt' })
+      const { chromium } = await import('playwright')
+      const profileDir = path.join(__dirname, '..', 'zalo_user_data')
+      try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+      try { fs.mkdirSync(path.join(__dirname, '..', 'public'), { recursive: true }) } catch {}
+      const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+      const context = await chromium.launchPersistentContext(profileDir, {
+        headless: false,
+        args: ['--disable-blink-features=AutomationControlled'],
+        userAgent: ua
+      })
+      const page = context.pages[0] || await context.newPage()
+      page.setDefaultTimeout(0)
+      try { await page.setViewportSize({ width: 1080, height: 1920 }) } catch {}
+      send('status', { msg: 'Đang mở trang đăng nhập Zalo' })
+      await page.goto('https://id.zalo.me/', { timeout: 0 })
+      const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
+      for (let i = 0; i < 60; i++) {
+        if (closing) break
+        const ts = new Date().toISOString().replace(/[:.]/g, '-')
+        const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
+        try {
+          await page.screenshot({ path: base, fullPage: true })
+          await page.screenshot({ path: hist, fullPage: true })
+          send('screenshot', { ts })
+        } catch {
+          send('status', { msg: 'Không thể chụp ảnh' })
+        }
+        await new Promise(r => setTimeout(r, 1000))
+      }
+      try { await context.close() } catch {}
+      send('end', { msg: 'Kết thúc quét' })
+      try { res.end() } catch {}
+    } catch (e) {
+      send('error', { msg: String(e && e.message ? e.message : e || '') })
+      try { res.end() } catch {}
+    }
+  })()
+  req.on('close', () => { closing = true })
 })
 
 app.post('/admin/messaging', async (req, res) => {

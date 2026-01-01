@@ -29,6 +29,17 @@
       <form class="form" method="POST" action="/admin/messaging/login">
         <button class="btn btn-primary" type="submit">Login Zalo (Chromium)</button>
       </form>
+      <div class="muted" style="margin-top:8px">
+        Trạng thái đăng nhập:
+        <strong>
+          <%= (typeof zalo_logged_in === 'boolean')
+                ? (zalo_logged_in ? 'Đã đăng nhập' : 'Chưa đăng nhập')
+                : 'Không kiểm tra được' %>
+        </strong>
+        <% if (zalo_status_checked_at) { %>
+          · Cập nhật: <%= new Date(zalo_status_checked_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) %>
+        <% } %>
+      </div>
     </div>
     <div class="card">
       <h2>Chụp mã QR đăng nhập Zalo</h2>
@@ -52,6 +63,40 @@
         <% } %>
       <% } %>
     </div>
+    <div class="card">
+      <h2>Quét mã đăng nhập (Live)</h2>
+      <div class="form" style="grid-template-columns: auto auto;">
+        <button class="btn btn-primary" type="button" id="start-live">Bắt đầu quét</button>
+        <button class="btn btn-outline" type="button" id="stop-live" disabled>Dừng</button>
+      </div>
+      <div id="live-area" style="margin-top:12px; display:none">
+        <div class="muted" id="live-status">Đang chuẩn bị...</div>
+        <div style="margin-top:8px">
+          <img id="live-img" src="/zalo_login.png?ts=0" alt="Live QR" style="max-width:100%; border:1px solid #ddd; border-radius:8px; display:none" />
+        </div>
+        <div style="margin-top:8px; background:#f9f9f9; border:1px solid #eee; border-radius:6px; padding:8px;">
+          <div class="muted" style="margin-bottom:4px">Nhật ký</div>
+          <div id="live-log" style="font-family:monospace; white-space:pre-wrap; font-size:12px; max-height:200px; overflow:auto;"></div>
+        </div>
+      </div>
+    </div>
+    <% if (fsImageExists) { %>
+    <div class="card">
+      <h2>Ảnh toàn trang gần đây</h2>
+      <div style="margin-top:12px">
+        <img src="/zalo_full_screen.png" alt="Ảnh toàn trang" style="max-width:100%; border:1px solid #ddd; border-radius:8px" />
+      </div>
+      <% if ((fsImages||[]).length) { %>
+        <div style="margin-top:12px">
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:8px;">
+            <% fsImages.forEach(img => { %>
+              <a href="/<%= img %>" target="_blank"><img src="/<%= img %>" alt="<%= img %>" style="width:100%; border:1px solid #ddd; border-radius:6px" /></a>
+            <% }) %>
+          </div>
+        </div>
+      <% } %>
+    </div>
+    <% } %>
     <div class="card">
       <h2>Lịch sử gửi thông báo cho học sinh</h2>
       <form class="form" method="GET" action="/admin/messaging" style="grid-template-columns: 1fr 1fr auto auto;">
@@ -101,4 +146,71 @@
     </div>
   </div>
 </body>
+<script>
+  const startBtn = document.getElementById('start-live');
+  const stopBtn = document.getElementById('stop-live');
+  const area = document.getElementById('live-area');
+  const img = document.getElementById('live-img');
+  const statusEl = document.getElementById('live-status');
+  const logEl = document.getElementById('live-log');
+  let es = null;
+  function appendLog(s) {
+    const t = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+    logEl.textContent += `[${t}] ${s}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function startLive() {
+    if (es) return;
+    area.style.display = 'block';
+    img.style.display = 'none';
+    statusEl.textContent = 'Đang khởi tạo...';
+    appendLog('Bắt đầu phiên quét');
+    es = new EventSource('/admin/messaging/qr/live');
+    es.addEventListener('status', (ev) => {
+      try {
+        const d = JSON.parse(ev.data || '{}');
+        statusEl.textContent = d.msg || '';
+        appendLog(d.msg || '');
+      } catch {}
+    });
+    es.addEventListener('screenshot', (ev) => {
+      try {
+        const d = JSON.parse(ev.data || '{}');
+        const ts = d.ts || String(Date.now());
+        img.src = '/zalo_login.png?ts=' + encodeURIComponent(ts);
+        img.style.display = 'block';
+        appendLog('Đã chụp ảnh');
+      } catch {}
+    });
+    es.addEventListener('end', (ev) => {
+      try {
+        const d = JSON.parse(ev.data || '{}');
+        statusEl.textContent = d.msg || 'Kết thúc';
+        appendLog(d.msg || 'Kết thúc');
+      } catch {}
+      stopLive();
+    });
+    es.addEventListener('error', (ev) => {
+      try {
+        const d = JSON.parse(ev.data || '{}');
+        statusEl.textContent = d.msg || 'Lỗi';
+        appendLog(d.msg || 'Lỗi');
+      } catch {}
+      stopLive();
+    });
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  }
+  function stopLive() {
+    if (es) {
+      es.close();
+      es = null;
+      appendLog('Đã dừng phiên quét');
+    }
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  }
+  startBtn.addEventListener('click', startLive);
+  stopBtn.addEventListener('click', stopLive);
+</script>
 </html>
