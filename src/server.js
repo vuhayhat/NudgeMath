@@ -505,6 +505,7 @@ async function sendZaloToStudent(phone, message) {
     const url = `https://chat.zalo.me/?phone=${encodeURIComponent(String(phone))}`
     await page.goto(url, { timeout: 0 })
     try {
+      removeOldScreenshots('full')
       const fullBase = path.join(__dirname, '..', 'public', 'zalo_full_screen.png')
       const tsFull = new Date().toISOString().replace(/[:.]/g, '-')
       const fullHist = path.join(__dirname, '..', 'public', `zalo_full_screen_${tsFull}.png`)
@@ -512,6 +513,7 @@ async function sendZaloToStudent(phone, message) {
       await page.screenshot({ path: fullHist, fullPage: true })
     } catch {}
     try {
+      removeOldScreenshots('login')
       const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
       const ts = new Date().toISOString().replace(/[:.]/g, '-')
       const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
@@ -528,6 +530,7 @@ async function sendZaloToStudent(phone, message) {
     const target = await page.waitForSelector('#input_line_0', { timeout: 10000 }).catch(() => null)
     if (!target) {
       try {
+        removeOldScreenshots('login')
         const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
         const ts = new Date().toISOString().replace(/[:.]/g, '-')
         const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
@@ -550,6 +553,7 @@ async function sendZaloToStudent(phone, message) {
     }
     await new Promise(r => setTimeout(r, 3000))
     try {
+      removeOldScreenshots('full')
       const fullBaseAfter = path.join(__dirname, '..', 'public', 'zalo_full_screen.png')
       const tsFullAfter = new Date().toISOString().replace(/[:.]/g, '-')
       const fullHistAfter = path.join(__dirname, '..', 'public', `zalo_full_screen_${tsFullAfter}.png`)
@@ -567,6 +571,17 @@ async function logZaloSend(studentId, phone, content, success, error) {
   try {
     if (!usePg) return
     await pool.query('INSERT INTO zalo_logs (student_id, phone, content, success, error) VALUES ($1,$2,$3,$4,$5)', [studentId || null, phone || null, content || '', !!success, error || null])
+  } catch {}
+}
+
+function removeOldScreenshots(kind) {
+  try {
+    const pub = path.join(__dirname, '..', 'public')
+    const prefix = kind === 'full' ? 'zalo_full_screen_' : 'zalo_login_'
+    const files = fs.readdirSync(pub).filter(f => f.startsWith(prefix) && f.endsWith('.png'))
+    for (const f of files) {
+      try { fs.unlinkSync(path.join(pub, f)) } catch {}
+    }
   } catch {}
 }
 
@@ -593,6 +608,7 @@ async function checkZaloLoginStatus() {
     } catch {
       loggedIn = false
       try {
+        removeOldScreenshots('login')
         const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
         const ts = new Date().toISOString().replace(/[:.]/g, '-')
         const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
@@ -993,11 +1009,12 @@ app.get('/admin/messaging/qr/live', (req, res) => {
       send('status', { msg: 'Đang mở trang đăng nhập Zalo' })
       await page.goto('https://id.zalo.me/', { timeout: 0 })
       const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 20; i++) {
         if (closing) break
         const ts = new Date().toISOString().replace(/[:.]/g, '-')
         const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
         try {
+          removeOldScreenshots('login')
           await page.screenshot({ path: base, fullPage: true })
           await page.screenshot({ path: hist, fullPage: true })
           send('screenshot', { ts })
@@ -1045,12 +1062,13 @@ app.post('/admin/messaging/qr', async (req, res) => {
     await page.goto(url, { timeout: 0 })
     const outPath = path.join(__dirname, '..', 'public', 'zalo_login.png')
     try {
+      removeOldScreenshots('login')
       await page.screenshot({ path: outPath, fullPage: true })
       const ts = new Date().toISOString().replace(/[:.]/g, '-')
       const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
       await page.screenshot({ path: hist, fullPage: true })
     } catch {}
-    await new Promise(r => setTimeout(r, 2000))
+    await new Promise(r => setTimeout(r, 1000))
     await context.close()
   } catch {}
   res.redirect('/admin/messaging')
@@ -1078,11 +1096,13 @@ app.post('/admin/messaging/login', (req, res) => {
       const ts = new Date().toISOString().replace(/[:.]/g, '-')
       const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
       try {
+        removeOldScreenshots('login')
         await page.screenshot({ path: base, fullPage: true })
         await page.screenshot({ path: hist, fullPage: true })
       } catch {}
-      await new Promise(r => setTimeout(r, 60000))
+      await new Promise(r => setTimeout(r, 10000))
       try {
+        removeOldScreenshots('login')
         await page.screenshot({ path: base, fullPage: true })
         await page.screenshot({ path: hist, fullPage: true })
       } catch {}
