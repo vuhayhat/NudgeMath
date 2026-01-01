@@ -25,6 +25,19 @@
       </form>
     </div>
     <div class="card">
+      <h2>Kiểm tra môi trường Playwright</h2>
+      <div class="form" style="grid-template-columns: auto;">
+        <button class="btn btn-outline" type="button" id="selftest-btn">Chạy kiểm tra</button>
+      </div>
+      <div id="selftest-area" style="margin-top:12px; display:none;">
+        <div class="muted">Kết quả:</div>
+        <div id="selftest-result" style="font-family:monospace; white-space:pre-wrap; font-size:12px; background:#f9f9f9; border:1px solid #eee; border-radius:6px; padding:8px;"></div>
+        <div id="selftest-image" style="margin-top:8px; display:none;">
+          <img src="/zalo_selftest.png?ts=0" alt="Self Test" style="max-width:100%; border:1px solid #ddd; border-radius:8px" />
+        </div>
+      </div>
+    </div>
+    <div class="card">
       <h2>Login Zalo lần đầu</h2>
       <form class="form" method="POST" action="/admin/messaging/login">
         <button class="btn btn-primary" type="submit">Login Zalo (Chromium)</button>
@@ -153,6 +166,10 @@
   const img = document.getElementById('live-img');
   const statusEl = document.getElementById('live-status');
   const logEl = document.getElementById('live-log');
+  const selfBtn = document.getElementById('selftest-btn');
+  const selfArea = document.getElementById('selftest-area');
+  const selfRes = document.getElementById('selftest-result');
+  const selfImg = document.getElementById('selftest-image');
   let es = null;
   function appendLog(s) {
     const t = new Date().toLocaleTimeString('vi-VN', { hour12: false });
@@ -212,5 +229,27 @@
   }
   startBtn.addEventListener('click', startLive);
   stopBtn.addEventListener('click', stopLive);
+  selfBtn.addEventListener('click', async () => {
+    selfArea.style.display = 'block';
+    selfImg.style.display = 'none';
+    selfRes.textContent = 'Đang chạy kiểm tra...';
+    try {
+      const resp = await fetch('/admin/messaging/selftest');
+      const data = await resp.json();
+      const lines = [];
+      lines.push(`Tổng thể: ${data.ok ? 'OK' : 'FAIL'}`);
+      (data.steps || []).forEach(s => {
+        lines.push(`- ${s.name}: ${s.status}${s.error ? ' | ' + s.error : ''}${s.hint ? ' | ' + s.hint : ''}`);
+      });
+      selfRes.textContent = lines.join('\n');
+      if (data.ok && (data.steps || []).some(s => s.file === '/zalo_selftest.png')) {
+        const ts = String(Date.now());
+        selfImg.querySelector('img').src = '/zalo_selftest.png?ts=' + encodeURIComponent(ts);
+        selfImg.style.display = 'block';
+      }
+    } catch (e) {
+      selfRes.textContent = 'Lỗi khi gọi selftest: ' + (e && e.message ? e.message : e);
+    }
+  });
 </script>
 </html>

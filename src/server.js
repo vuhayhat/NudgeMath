@@ -898,6 +898,69 @@ app.get('/admin/messaging', async (req, res) => {
   })
 })
 
+app.get('/admin/messaging/selftest', async (req, res) => {
+  const result = { ok: false, steps: [] }
+  try {
+    result.steps.push({ name: 'import_playwright', status: 'running' })
+    let pw
+    try {
+      pw = await import('playwright')
+      result.steps[result.steps.length - 1] = { name: 'import_playwright', status: 'ok' }
+    } catch (e) {
+      result.steps[result.steps.length - 1] = { name: 'import_playwright', status: 'fail', error: String(e), hint: 'Cài đặt Playwright: npm install playwright' }
+      return res.json(result)
+    }
+    result.steps.push({ name: 'launch_chromium', status: 'running' })
+    const profileDir = path.join(__dirname, '..', 'zalo_user_data')
+    try { fs.mkdirSync(profileDir, { recursive: true }) } catch {}
+    const ua = (await getSetting('zalo_user_agent')) || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+    let context
+    try {
+      context = await pw.chromium.launchPersistentContext(profileDir, {
+        headless: true,
+        args: ['--disable-blink-features=AutomationControlled'],
+        userAgent: ua
+      })
+      result.steps[result.steps.length - 1] = { name: 'launch_chromium', status: 'ok' }
+    } catch (e) {
+      const msg = String(e && e.message ? e.message : e || '')
+      const hint = msg.toLowerCase().includes('install')
+        ? 'Cài browser: npx playwright install chromium'
+        : 'Kiểm tra cài đặt Playwright và quyền chạy Chromium'
+      result.steps[result.steps.length - 1] = { name: 'launch_chromium', status: 'fail', error: msg, hint }
+      return res.json(result)
+    }
+    const page = context.pages[0] || await context.newPage()
+    page.setDefaultTimeout(0)
+    result.steps.push({ name: 'navigate_id_zalo', status: 'running' })
+    try {
+      await page.goto('https://id.zalo.me/', { timeout: 0 })
+      result.steps[result.steps.length - 1] = { name: 'navigate_id_zalo', status: 'ok' }
+    } catch (e) {
+      result.steps[result.steps.length - 1] = { name: 'navigate_id_zalo', status: 'fail', error: String(e), hint: 'Kiểm tra kết nối mạng/HTTPS outbound' }
+      try { await context.close() } catch {}
+      return res.json(result)
+    }
+    result.steps.push({ name: 'screenshot_public', status: 'running' })
+    try {
+      try { fs.mkdirSync(path.join(__dirname, '..', 'public'), { recursive: true }) } catch {}
+      const base = path.join(__dirname, '..', 'public', 'zalo_selftest.png')
+      await page.screenshot({ path: base, fullPage: true })
+      result.steps[result.steps.length - 1] = { name: 'screenshot_public', status: 'ok', file: '/zalo_selftest.png' }
+    } catch (e) {
+      result.steps[result.steps.length - 1] = { name: 'screenshot_public', status: 'fail', error: String(e), hint: 'Kiểm tra quyền ghi thư mục public' }
+      try { await context.close() } catch {}
+      return res.json(result)
+    }
+    try { await context.close() } catch {}
+    result.ok = true
+    return res.json(result)
+  } catch (e) {
+    result.steps.push({ name: 'unexpected', status: 'fail', error: String(e) })
+    return res.json(result)
+  }
+})
+
 app.get('/admin/messaging/qr/live', (req, res) => {
   if (!usePg) return res.end()
   res.setHeader('Content-Type', 'text/event-stream')
