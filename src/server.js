@@ -472,6 +472,7 @@ async function sendZaloToStudent(phone, message) {
     })
     const page = context.pages[0] || await context.newPage()
     page.setDefaultTimeout(0)
+    try { await page.setViewportSize({ width: 1080, height: 1920 }) } catch {}
     const cookieStr = await getSetting('zalo_cookies')
     if (cookieStr && cookieStr.trim()) {
       const pairs = cookieStr.split(';').map(s => s.trim()).filter(s => s.includes('='))
@@ -497,7 +498,13 @@ async function sendZaloToStudent(phone, message) {
     }
     const url = `https://chat.zalo.me/?phone=${encodeURIComponent(String(phone))}`
     await page.goto(url, { timeout: 0 })
-    try { await page.screenshot({ path: path.join(__dirname, '..', 'zalo_full_screen.png'), fullPage: true }) } catch {}
+    try {
+      const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
+      await page.screenshot({ path: base, fullPage: true })
+      await page.screenshot({ path: hist, fullPage: true })
+    } catch {}
     try {
       const chatBtn = await page.waitForSelector('div[data-translate-inner=\"STR_CHAT\"]', { timeout: 5000 })
       if (chatBtn) {
@@ -507,7 +514,13 @@ async function sendZaloToStudent(phone, message) {
     } catch {}
     const target = await page.waitForSelector('#input_line_0', { timeout: 10000 }).catch(() => null)
     if (!target) {
-      try { await page.screenshot({ path: path.join(__dirname, '..', 'public', 'zalo_login.png'), fullPage: true }) } catch {}
+      try {
+        const base = path.join(__dirname, '..', 'public', 'zalo_login.png')
+        const ts = new Date().toISOString().replace(/[:.]/g, '-')
+        const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
+        await page.screenshot({ path: base, fullPage: true })
+        await page.screenshot({ path: hist, fullPage: true })
+      } catch {}
       await context.close()
       return false
     }
@@ -749,7 +762,7 @@ app.get('/admin/classes/:id', async (req, res) => {
 })
 
 app.get('/admin/messaging', async (req, res) => {
-  if (!usePg) return res.render('admin_messaging', { zalo_cookies: '', zalo_user_agent: '', logs: [], qrImageExists: false, classes: [], students: [], selectedClassId: '', selectedStudentId: '' })
+  if (!usePg) return res.render('admin_messaging', { zalo_cookies: '', zalo_user_agent: '', logs: [], qrImageExists: false, qrImages: [], classes: [], students: [], selectedClassId: '', selectedStudentId: '' })
   const c = await pool.query('SELECT key, value FROM system_settings WHERE key IN ($1,$2)', ['zalo_cookies', 'zalo_user_agent'])
   const m = {}
   for (const r of c.rows) m[r.key] = r.value
@@ -771,11 +784,23 @@ app.get('/admin/messaging', async (req, res) => {
     students = await pool.query('SELECT id, name, username FROM students ORDER BY id DESC LIMIT 200')
   }
   let qrImageExists = false
+  let qrImages = []
   try {
     const p = path.join(__dirname, '..', 'public', 'zalo_login.png')
     qrImageExists = fs.existsSync(p)
+    const pub = path.join(__dirname, '..', 'public')
+    const all = fs.readdirSync(pub).filter(f => f.startsWith('zalo_login') && f.endsWith('.png'))
+    const withStat = all.map(f => {
+      try {
+        const s = fs.statSync(path.join(pub, f))
+        return { f, t: s.mtimeMs }
+      } catch {
+        return { f, t: 0 }
+      }
+    }).sort((a,b) => b.t - a.t).slice(0, 8).map(x => x.f)
+    qrImages = withStat
   } catch {}
-  res.render('admin_messaging', { zalo_cookies: m['zalo_cookies'] || '', zalo_user_agent: m['zalo_user_agent'] || '', logs: logsQ.rows, qrImageExists, classes: classes.rows, students: students.rows, selectedClassId: req.query.class_id || '', selectedStudentId: req.query.student_id || '' })
+  res.render('admin_messaging', { zalo_cookies: m['zalo_cookies'] || '', zalo_user_agent: m['zalo_user_agent'] || '', logs: logsQ.rows, qrImageExists, qrImages, classes: classes.rows, students: students.rows, selectedClassId: req.query.class_id || '', selectedStudentId: req.query.student_id || '' })
 })
 
 app.post('/admin/messaging', async (req, res) => {
@@ -800,11 +825,17 @@ app.post('/admin/messaging/qr', async (req, res) => {
     })
     const page = context.pages[0] || await context.newPage()
     page.setDefaultTimeout(0)
+    try { await page.setViewportSize({ width: 1080, height: 1920 }) } catch {}
     const phone = (req.body.phone || '').trim()
     const url = phone ? `https://chat.zalo.me/?phone=${encodeURIComponent(phone)}` : 'https://chat.zalo.me/'
     await page.goto(url, { timeout: 0 })
     const outPath = path.join(__dirname, '..', 'public', 'zalo_login.png')
-    try { await page.screenshot({ path: outPath, fullPage: true }) } catch {}
+    try {
+      await page.screenshot({ path: outPath, fullPage: true })
+      const ts = new Date().toISOString().replace(/[:.]/g, '-')
+      const hist = path.join(__dirname, '..', 'public', `zalo_login_${ts}.png`)
+      await page.screenshot({ path: hist, fullPage: true })
+    } catch {}
     await new Promise(r => setTimeout(r, 2000))
     await context.close()
   } catch {}

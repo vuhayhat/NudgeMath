@@ -27,7 +27,7 @@
     <div class="card">
       <h2>Login Zalo lần đầu</h2>
       <form class="form" method="POST" action="/admin/messaging/login">
-        <button class="btn btn-primary" type="submit">Mở trình duyệt để đăng nhập</button>
+        <button class="btn btn-primary" type="submit">Login Zalo (Chromium)</button>
       </form>
     </div>
     <div class="card">
@@ -40,6 +40,16 @@
         <div style="margin-top:12px">
           <img src="/zalo_login.png" alt="QR đăng nhập Zalo" style="max-width:100%; border:1px solid #ddd; border-radius:8px" />
         </div>
+        <% if ((qrImages||[]).length) { %>
+          <div style="margin-top:12px">
+            <h3>Ảnh gần đây</h3>
+            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:8px;">
+              <% qrImages.forEach(img => { %>
+                <a href="/<%= img %>" target="_blank"><img src="/<%= img %>" alt="<%= img %>" style="width:100%; border:1px solid #ddd; border-radius:6px" /></a>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
       <% } %>
     </div>
     <div class="card">
