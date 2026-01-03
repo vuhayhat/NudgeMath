@@ -1,3 +1,15 @@
-2026/01/01-20:50:06.889 203c Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/MANIFEST-000001
-2026/01/01-20:50:06.890 203c Recovering log #51
-2026/01/01-20:50:06.922 203c Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/000051.log 
+2026/01/03-10:14:48.511 5544 Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/03-10:14:48.511 5544 Recovering log #63
+2026/01/03-10:14:48.543 5544 Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\IndexedDB\https_chat.zalo.me_0.indexeddb.leveldb/000063.log 
+2026/01/03-10:14:48.544 5544 Delete type=2 #60
+2026/01/03-10:14:48.544 5544 Delete type=2 #61
+2026/01/03-10:14:48.544 5544 Delete type=2 #64
+2026/01/03-10:14:54.605 5f68 Level-0 table #70: started
+2026/01/03-10:14:54.622 5f68 Level-0 table #70: 1210780 bytes OK
+2026/01/03-10:14:54.623 5f68 Delete type=0 #63
+2026/01/03-10:14:55.652 5f68 Compacting 1@1 + 4@2 files
+2026/01/03-10:14:55.678 5f68 Generated table #71@1: 14353 keys, 2148970 bytes
+2026/01/03-10:14:55.703 5f68 Generated table #72@1: 42698 keys, 2191650 bytes
+2026/01/03-10:14:55.714 5f68 Generated table #73@1: 11913 keys, 643657 bytes
+2026/01/03-10:14:55.714 5f68 Compacted 1@1 + 4@2 files => 4984277 bytes
+2026/01/03-10:14:55.715 5f68 compacted to: files[ 0 0 3 0 0 0 0 ]

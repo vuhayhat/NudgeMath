@@ -337,36 +337,6 @@ app.post('/admin/exercises/new/manual', upload.array('images', 10), async (req, 
   res.redirect('/admin/exercises')
 })
 
-function generateAIQuestion(grade, difficulty, topic) {
-  const g = grade || 10
-  const d = (difficulty || 'easy').toLowerCase()
-  const t = (topic || 'hàm số').toLowerCase()
-  const base = `Câu hỏi ${t} lớp ${g} (${d})`
-  let question = `${base}: Cho hàm số f(x)=x^2+2x+1. Giá trị f(2) bằng bao nhiêu?`
-  let opts = { A: '3', B: '5', C: '9', D: '7' }
-  let answer = 'C'
-  let explains = {
-    A: 'Sai: f(2)=2^2+2*2+1=9, không phải 3',
-    B: 'Sai: cộng chưa đúng',
-    C: 'Đúng: 4+4+1=9',
-    D: 'Sai: kết quả không khớp'
-  }
-  let solution = 'Tính trực tiếp: f(2)=2^2+2*2+1=4+4+1=9'
-  if (t.includes('tích phân')) {
-    question = `${base}: Tính ∫_0^1 2x dx`
-    opts = { A: '1', B: '2', C: '0.5', D: '3' }
-    answer = 'A'
-    explains = {
-      A: 'Đúng: ∫0^1 2x dx = [x^2]_0^1 = 1',
-      B: 'Sai: gấp đôi không đúng',
-      C: 'Sai: nửa là nhầm',
-      D: 'Sai: quá lớn'
-    }
-    solution = 'Nguyên hàm 2x là x^2, giá trị từ 0 đến 1 là 1'
-  }
-  return { question, opts, answer, explains, solution }
-}
-
 function computeAutoNudge(e, selected, isCorrect) {
   const d = (e.difficulty || '').toLowerCase()
   const t = (e.topic || '').toLowerCase()
@@ -661,9 +631,10 @@ async function generateAIQuestionGemini(grade, difficulty, topic, images = []) {
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
   if (!apiKey) throw new Error('Missing GEMINI_API_KEY')
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`
+  const g = grade || 10
   const prompt = [
     `Bạn là trợ lý tạo bài toán trắc nghiệm Toán bằng tiếng Việt.`,
-    `Yêu cầu: tạo 1 câu hỏi trắc nghiệm phù hợp lớp ${grade || ''} độ khó ${difficulty || ''} theo chủ đề "${topic || ''}".`,
+    `Yêu cầu: tạo 1 câu hỏi trắc nghiệm phù hợp lớp ${g} độ khó ${difficulty || ''} theo chủ đề "${topic || ''}".`,
     `Nếu có ảnh đính kèm, hãy tham khảo để tạo bài tương tự về ngữ cảnh/kỹ thuật và độ khó không thấp hơn.`,
     `Đầu ra chỉ là JSON không kèm giải thích, không markdown, với schema:`,
     `{"question": string, "opts": {"A": string, "B": string, "C": string, "D": string}, "answer": "A"|"B"|"C"|"D", "explains": {"A": string, "B": string, "C": string, "D": string}, "solution": string}`
@@ -742,7 +713,8 @@ app.post('/admin/exercises/new/ai', upload.array('images', 10), async (req, res)
   try {
     gen = await generateAIQuestionGemini(g, d, t, images)
   } catch (e) {
-    gen = generateAIQuestion(g, d, t)
+    const err = String(e && e.message ? e.message : e || '')
+    return res.redirect(`/admin/exercises/new/ai?error=${encodeURIComponent(err)}&topic=${encodeURIComponent(topic || '')}&difficulty=${encodeURIComponent(difficulty || '')}&class_id=${encodeURIComponent(class_id || '')}&due_at=${encodeURIComponent(due_at || '')}&due_hours=${encodeURIComponent(due_hours || '')}`)
   }
   const title = gen.question.slice(0, 120)
   const q = `INSERT INTO exercises (title, description, mode, question, opt_a, opt_b, opt_c, opt_d, answer, explain_a, explain_b, explain_c, explain_d, ai_solution, grade_level, difficulty, topic, images) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`

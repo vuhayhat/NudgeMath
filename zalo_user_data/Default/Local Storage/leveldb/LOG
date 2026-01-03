@@ -1,2 +1,9 @@
-2026/01/01-20:56:59.554 526c Creating DB D:\job\NudgeMath_AI\zalo_user_data\Default\Local Storage\leveldb since it was missing.
-2026/01/01-20:56:59.564 526c Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/01/03-10:25:18.818 5974 Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/01/03-10:25:18.826 5974 Recovering log #4
+2026/01/03-10:25:18.827 5974 Level-0 table #6: started
+2026/01/03-10:25:18.834 5974 Level-0 table #6: 76938 bytes OK
+2026/01/03-10:25:18.835 5974 Recovering log #5
+2026/01/03-10:25:18.837 5974 Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\Local Storage\leveldb/000005.log 
+2026/01/03-10:25:18.840 5974 Delete type=0 #4
+2026/01/03-10:25:28.414 5974 Level-0 table #8: started
+2026/01/03-10:25:28.426 5974 Level-0 table #8: 83900 bytes OK

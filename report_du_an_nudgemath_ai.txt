@@ -1,0 +1,209 @@
+1. THÔNG TIN TỔNG QUAN VỀ DỰ ÁN
+- Tên dự án: NudgeMath AI
+- Mục tiêu: Hỗ trợ giáo viên giao bài trắc nghiệm Toán; sinh câu hỏi bằng AI; theo dõi tiến độ; gửi thông báo trực tiếp cho học sinh qua Zalo; tối ưu thói quen học tập (streak, stars, nudge).
+- Phạm vi: Quản trị lớp/học sinh; tạo/giao/chấm bài; sinh bài AI; nhắn tin Zalo; thống kê/khảo sát; theo dõi lịch sử gửi; cấu hình cookies/UA; quản lý kế hoạch học (learning plans).
+- Các bên liên quan: Giáo viên/Admin; Học sinh; Vận hành hệ thống (Dev/Ops); Tích hợp Zalo; Tích hợp Gemini API.
+- Thời gian thực hiện: 01/2026 – hiện tại.
+
+2. NỘI DUNG CHI TIẾT DỰ ÁN
+2.1 Yêu cầu chức năng
+- Quản lý lớp học và học sinh: tạo lớp; thêm/sửa học sinh; gán học sinh vào lớp; lưu số điện thoại Zalo.
+- Quản lý bài tập: tạo bài thủ công; tạo bài bằng AI; gán bài cho lớp; đặt hạn nộp; xem danh sách đã giao.
+- Làm bài phía học sinh: đăng nhập; xem danh sách bài; làm và nộp; tự chấm với bài AI; nhận nudge/sticker/stars.
+- Nhắn tin Zalo: gửi thông báo bài mới trực tiếp tới học sinh theo số điện thoại; ghi lịch sử gửi; hiển thị trạng thái; chụp ảnh QR/login; quét login live.
+- Theo dõi/điều hành: xem tiến độ, lịch sử nộp; thống kê tuần; khảo sát; kế hoạch học; sinh đề theo plan.
+- Cấu hình hệ thống: cookies và User-Agent Zalo; kiểm tra môi trường Playwright; postinstall cài Chromium.
+
+2.2 Yêu cầu phi chức năng
+- Bảo mật: không ghi lộ secrets; dùng biến môi trường cho GEMINI_API_KEY; tránh log thông tin nhạy cảm.
+- Hiệu năng: phản hồi nhanh trang quản trị; gửi Zalo thao tác tự động hóa có thời gian chờ tối ưu; tải ảnh nhẹ.
+- Khả dụng: hỗ trợ chạy trên Windows/Ubuntu; headless/headful; có cơ chế tự kiểm tra môi trường.
+- Khả trì: kiến trúc rõ; module hóa; có bảng log; cấu hình qua DB; code EJS đơn giản; không phụ thuộc trình duyệt hệ thống.
+- Khả mở rộng: thêm class/student/bài/plan dễ dàng; có SSE để quan sát live; dữ liệu thống kê/khảo sát mở rộng.
+
+2.3 Kiến trúc hệ thống và công nghệ
+- Backend: Node.js (Express); view engine: EJS; session: express-session + connect-pg-simple; file upload: multer.
+- Database: PostgreSQL (bảng teachers, students, classes, exercises, assignments, submissions, messages, weekly_stats, surveys, system_settings, zalo_logs, learning_plans, plan_items).
+- Tự động hóa trình duyệt: Playwright (Chromium persistent context) để login/gửi tin/chụp ảnh; SSE để quét login live.
+- AI: Gemini API (generateContent) với ảnh tham chiếu tùy chọn; fallback generator nội bộ khi API lỗi; đảm bảo độ khó không thấp hơn chọn.
+- Static: public/ chứa ảnh chụp (zalo_login.png, zalo_full_screen.png…).
+- Triển khai: postinstall tự cài Chromium; môi trường xác thực/headless; đường dẫn profile: zalo_user_data tại thư mục dự án.
+
+2.4 Sơ đồ quy trình nghiệp vụ (mô tả bằng text)
+- Giáo viên cấu hình cookies/UA và đăng nhập Zalo qua phiên Chromium; hệ thống chụp ảnh QR/login để xác nhận.
+- Giáo viên tạo bài (thủ công hoặc AI); chọn lớp; đặt hạn; giao bài → hệ thống gửi thông báo Zalo tới từng học sinh có số điện thoại.
+- Học sinh đăng nhập, làm bài; hệ thống tự chấm (bài AI), lưu kết quả, cập nhật streak/stars, ghi nudge/sticker.
+- Giáo viên xem lịch sử gửi (zalo_logs), tiến độ nộp, thống kê tuần, khảo sát; điều chỉnh kế hoạch học; có thể sinh bài theo plan.
+- Khi cần xác minh login, giáo viên dùng “Quét mã đăng nhập (Live)” để quan sát ảnh cập nhật theo thời gian thực.
+
+2.5 Mô hình dữ liệu và cơ sở dữ liệu (tóm tắt)
+- teachers(id, email, password_hash, name, created_at)
+- students(id, email?, password_hash, name, username, class_id, streak, stars, phone, created_at)
+- classes(id, name, locked, zalo_group_url?, created_at)
+- exercises(id, title, description, mode, question, choix A-D, answer, explains A-D, ai_solution, grade_level, difficulty, topic, images[])
+- assignments(id, class_id, exercise_id, assigned_at, due_at)
+- submissions(id, student_id, exercise_id, selected, is_correct, autograded, explanation, content, images[], nudge, sticker, stars, streak_delta, submitted_at, graded_at?)
+- messages(id, student_id, class_id, content, created_at, is_read)
+- weekly_stats(id, week_start, class_id, totals…, created_at); surveys(id, class_id, week_start, metrics…, created_at)
+- system_settings(key, value) dùng cho cấu hình Zalo cookies/UA; zalo_logs(id, student_id, phone, content, success, error, created_at)
+- learning_plans(id, class_id, name, start_at, end_at); plan_items(id, plan_id, topic, skill, difficulty, frequency, strategy, range_start, range_end, count, due_at)
+
+3. TIẾN ĐỘ THỰC HIỆN
+3.1 Các mốc quan trọng
+- Hoàn thiện quản trị lớp/học sinh; thêm cột phone; cập nhật UI nhập/sửa số điện thoại.
+- Chuyển gửi Zalo từ nhóm sang gửi trực tiếp từng học sinh; thêm ghi lịch sử (zalo_logs).
+- Tạo trang cấu hình Zalo (cookies/UA), login lần đầu, chụp QR; thêm trạng thái login và ảnh gần đây.
+- Bổ sung quét mã đăng nhập (Live) bằng SSE; rút ngắn thời gian quét; tự cập nhật ảnh.
+- Tích hợp tạo bài bằng AI (Gemini), truyền ảnh tham chiếu; fallback khi lỗi; mặc định lớp 10 cho bài AI.
+- Thêm postinstall cài Chromium; thêm selftest kiểm tra Playwright/Chromium/headless và quyền ghi public.
+- Sửa lỗi parse NaN cho các route; bổ sung helper toInt; điều chỉnh chụp trước/sau khi gửi tin.
+
+3.2 Kết quả đạt được
+- Hệ thống giao bài kèm thông báo Zalo trực tiếp đến từng học sinh hoạt động ổn định.
+- AI sinh bài đầy đủ (câu hỏi, đáp án, giải thích); có ảnh tham chiếu; kiểm soát độ khó.
+- Trang quản trị hiển thị trạng thái đăng nhập, ảnh gần đây, live quét QR; có nhật ký gửi chi tiết.
+- Cấu hình cookies/UA qua DB; kiểm tra môi trường giúp vận hành dễ dàng trên Ubuntu/Windows.
+
+3.3 Các vấn đề phát sinh và cách giải quyết
+- Lỗi invalid input syntax for integer "NaN": thêm toInt và kiểm tra null; chuyển hướng an toàn.
+- Thiếu Playwright/Chromium trên server: thêm postinstall (npx playwright install chromium) và selftest tuyến đầu.
+- Không thấy ô nhập chat (#input_line_0): chụp toàn trang để xác minh; rút ngắn thời gian quét; tiêm cookies/UA.
+- Khác biệt headless/headful trên server: cung cấp cơ chế live/SSE và ảnh chụp để theo dõi; khuyến nghị cài Xvfb nếu cần headful.
+- Dọn dẹp ảnh chụp cũ: xóa ảnh lịch sử cũ trước khi chụp mới để tránh rác và nhầm lẫn.
+
+4. KẾT QUẢ VÀ ĐÁNH GIÁ
+4.1 Các chức năng đã hoàn thành
+- Quản trị lớp/học sinh; tạo/giao/chấm; sinh bài AI; gửi Zalo từng học sinh; lịch sử gửi; cấu hình cookies/UA; trạng thái login; quét live; thống kê/khảo sát; kế hoạch học; tự kiểm tra môi trường.
+
+4.2 Kết quả kiểm thử
+- Kiểm thử thủ công toàn bộ luồng: tạo bài → giao lớp → gửi Zalo → học sinh làm bài → ghi log → xem ảnh/tiến độ.
+- Selftest Playwright: import, launch, navigate, screenshot → ảnh zalo_selftest.png cho thấy môi trường đầy đủ.
+- Thử nghiệm timeout và fallback: nếu không thấy input, chụp toàn trang; nếu Gemini 429/lỗi, fallback generator nội bộ.
+
+4.3 Đánh giá hiệu suất hệ thống
+- Trang quản trị phản hồi nhanh (EJS nhẹ, truy vấn Postgres đơn giản).
+- Tác vụ gửi Zalo phụ thuộc giao diện web Zalo: dùng UA/cookies và chờ hợp lý (chat btn ~5s, input ~10s).
+- Quét live: ảnh cập nhật mỗi 1s; phiên quét rút ngắn ~20s; ảnh chụp toàn trang trước/sau thao tác gửi.
+
+4.4 Bài học kinh nghiệm
+- Persistent context giúp giữ phiên bền vững giữa các lần deploy; tránh dùng trình duyệt hệ thống.
+- Cấu hình qua DB (cookies/UA) linh hoạt; kết hợp selftest giảm công sức vận hành.
+- SSE tăng khả năng quan sát quá trình login; ảnh chụp là bằng chứng trực quan khi lỗi/khó khăn.
+- Kiểm tra tham số đầu vào (toInt) là cần thiết để tránh lỗi DB và điều hướng an toàn.
+
+5. TÀI LIỆU THAM KHẢO VÀ PHỤ LỤC
+5.1 Tài liệu liên quan (mô tả)
+- Zalo Web (chat.zalo.me, id.zalo.me) — giao diện đăng nhập/nhắn tin.
+- Playwright (Chromium) — tự động hóa trình duyệt, persistent context.
+- Gemini API — generateContent; truyền ảnh inlineData; dùng biến môi trường GEMINI_API_KEY, GEMINI_MODEL.
+
+5.2 Mã nguồn chính (đường dẫn)
+- src/server.js — Express routes; gửi Zalo; SSE quét live; AI; status; selftest; toInt; safeFetch.
+- src/db.js — Kết nối và ensureSchema; các bảng dữ liệu chính; system_settings; zalo_logs.
+- views/admin_messaging.ejs — UI cấu hình cookies/UA; trạng thái; quét live; lịch sử gửi; selftest; ảnh gần đây.
+- views/admin_students.ejs — UI quản lý học sinh; nhập/sửa số điện thoại; lọc theo lớp.
+- views/admin_exercise_new_ai.ejs — UI tạo bài bằng AI; ảnh tham chiếu; gán lớp/hạn nộp.
+- package.json — scripts start/postinstall; dependencies (express, ejs, pg, playwright, …).
+
+5.3 Hình ảnh minh họa (mô tả bằng text)
+- public/zalo_login.png — ảnh QR/login hiện hành; khi chưa đăng nhập sẽ là màn hình yêu cầu đăng nhập.
+- public/zalo_full_screen.png — ảnh toàn trang hiện hành khi thao tác gửi tin tới chat.zalo.me.
+- public/zalo_selftest.png — ảnh chụp khi chạy tự kiểm tra môi trường Playwright/Chromium.
+- Các ảnh lịch sử (_<timestamp>.png) được tạo mới và ảnh cũ được xóa trước khi chụp để giảm rác.
+
+5.4 Thông tin kỹ thuật quan trọng
+- Biến môi trường: PORT; GEMINI_API_KEY; GEMINI_MODEL; NUDGE_TONE; UPLOAD_DIR; SESSION_SECRET/JWT_SECRET; GEMINI_MIN_INTERVAL_MS.
+- Yêu cầu phiên bản: Node >= 18 (khuyến nghị 20 LTS); Postgres 13+; Playwright Chromium cài qua postinstall.
+- Hỗ trợ Ubuntu/Windows; trên Ubuntu nếu thiếu thư viện hệ thống cần apt install các gói phụ trợ cho Chromium.
+
+KẾT LUẬN
+- Dự án đáp ứng mục tiêu giao bài và nhắn tin trực tiếp qua Zalo, tăng minh bạch và hiệu quả qua ảnh chụp/live SSE.
+- Kiến trúc đơn giản, mở rộng tốt, có cơ chế kiểm thử môi trường và fallback AI, phù hợp triển khai thực tế.
+ 
+PHỤ LỤC CHI TIẾT VÀ LÀM RÕ
+ 
+2.6 Danh sách endpoint chính (mô tả)
+- GET /admin/messaging: trang cấu hình Zalo; trạng thái đăng nhập; ảnh gần đây; lịch sử gửi; bộ lọc lớp/học sinh.
+- POST /admin/messaging: lưu cookies Zalo và User-Agent vào system_settings.
+- POST /admin/messaging/qr: chụp QR/login tại chat.zalo.me; lưu ảnh zalo_login.png và lịch sử mới nhất; xóa ảnh cũ trước khi chụp.
+- GET /admin/messaging/qr/live: SSE quét live login tại id.zalo.me; phát sự kiện và liên tục chụp ảnh; rút ngắn phiên ~20s.
+- POST /admin/messaging/login: mở phiên login Zalo bằng Chromium; chụp ảnh lúc đầu và sau 10s; phục vụ xác minh phiên.
+- GET/POST /admin/students: liệt kê/tạo học sinh; có nhập phone; lọc theo lớp.
+- POST /admin/students/:id/phone: cập nhật số điện thoại Zalo cho học sinh.
+- GET/POST /admin/exercises/new/ai: tạo bài bằng AI; nhận ảnh tham chiếu; gán lớp và hạn; gửi thông báo sau khi giao.
+- POST /admin/exercises/:id/assign: giao bài tới lớp; đặt hạn; gửi thông báo tới học sinh trong lớp.
+- GET /student, POST /student/login: trang đăng nhập học sinh.
+- GET /student/exercises, GET /student/exercises/:id: danh sách bài và chi tiết bài; hỗ trợ bài AI.
+- POST /student/exercises/:id/submit: nộp bài; tự chấm nếu bài AI; cập nhật streak/stars; lưu submissions và ảnh đính kèm.
+- GET /student/submissions: lịch sử nộp của học sinh.
+- GET /admin/exercises/assigned: danh sách bài đã giao; POST /admin/exercises/assigned/:id/delete: xóa giao bài.
+- GET /admin/progress: bảng tiến độ lớp/học sinh; top streak/stars; tuần; khảo sát; bộ lọc.
+- GET /admin/messaging/selftest: tự kiểm tra môi trường Playwright/Chromium; chụp ảnh zalo_selftest.png.
+ 
+2.7 Cấu hình hệ thống và biến môi trường (chi tiết)
+- system_settings:
+  - key zalo_cookies: chuỗi “name=value; …” để tiêm vào Chromium nhằm duy trì phiên Zalo.
+  - key zalo_user_agent: UA trình duyệt tùy chỉnh (mặc định Chrome 143) để tăng tính tương đồng với trình duyệt thật.
+- Biến môi trường:
+  - PORT: cổng web (mặc định 3000).
+  - GEMINI_API_KEY, GEMINI_MODEL: khóa và model cho sinh đề AI; có backoff và kiểm soát tần suất gọi.
+  - GEMINI_MIN_INTERVAL_MS: thời gian tối thiểu giữa hai lần gọi Gemini để tránh 429.
+  - SESSION_SECRET/JWT_SECRET: bí mật phiên; lưu trong môi trường, không hardcode.
+  - UPLOAD_DIR: thư mục lưu ảnh upload của bài AI/submissions.
+- Thư mục đặc biệt:
+  - zalo_user_data: persistent profile Chromium để giữ phiên đăng nhập.
+  - public: nơi lưu ảnh chụp (login, full_screen, selftest); ảnh cũ được dọn trước khi chụp mới.
+- Chế độ trình duyệt:
+  - Headless: dùng cho kiểm tra trạng thái, tự động chụp và hoạt động trên server không GUI.
+  - Headful: dùng cho login/quét live; nếu server không có GUI, khuyến nghị Xvfb.
+ 
+2.8 Chính sách xử lý lỗi
+- Zalo không hiện input chat: chụp ảnh toàn trang, trả về thất bại; ghi log vào zalo_logs; hiển thị trong trang quản trị.
+- Tham số số nguyên không hợp lệ: dùng toInt; nếu null, chuyển hướng trang an toàn; tránh truy vấn DB với NaN.
+- Gemini trả 429/lỗi: backoff theo chuỗi delay; fallback generator nội bộ đảm bảo hệ thống vẫn tạo đề.
+- Mạng hoặc HTTPS lỗi: safeFetch sử dụng https/http module khi fetch không sẵn có; báo lỗi rõ ràng.
+- Dọn ảnh cũ: trước khi chụp mới, xóa ảnh lịch sử cũ để tránh rác và nhầm lẫn.
+ 
+2.9 Bảo mật và quyền truy cập
+- Băm mật khẩu bằng bcryptjs; không lưu mật khẩu rõ.
+- Không log secrets (API key, cookies) vào console; quản trị cấu hình qua DB.
+- EJS mặc định escape nội dung; tránh XSS trong hiển thị dữ liệu động.
+- Phân quyền: hiện tại có vai trò học sinh và giáo viên/admin đơn giản; có thể mở rộng vai trò/phân quyền chi tiết sau.
+ 
+3.4 Kế hoạch triển khai và vận hành trên Ubuntu (tóm tắt)
+- Cài Node >= 18 (khuyên Node 20 LTS) bằng NodeSource hoặc NVM.
+- npm install (postinstall tự cài Chromium); nếu thiếu thư viện hệ thống, apt install các gói phụ trợ cho Chromium.
+- npm start; truy cập /admin/messaging; bấm “Chạy kiểm tra” để xác nhận môi trường.
+- Đăng nhập Zalo bằng “Login Zalo (Chromium)” hoặc chụp QR; scan bằng điện thoại; phiên lưu vào zalo_user_data.
+- Khuyến nghị gắn volume persist cho zalo_user_data và public nếu chạy trong container.
+ 
+3.5 Rủi ro và phương án
+- Chống tự động hóa từ Zalo: dùng UA hợp lý, cookies hợp lệ; quan sát ảnh live để can thiệp thủ công khi cần.
+- Mạng không ổn định: safeFetch và kiểm tra retry cho Gemini; chụp ảnh để xác định trạng thái.
+- Máy chủ không có GUI: chạy headless và hiển thị ảnh; nếu cần thao tác trực quan, dùng Xvfb.
+- Dữ liệu lớn: phân trang và giới hạn số bản ghi hiển thị (logs, students…) để tránh tải nặng.
+ 
+4.5 Đo lường và tối ưu
+- Thời gian quét live: ~20s, ảnh mỗi 1s; có thể điều chỉnh.
+- Thời gian chờ login/chụp: 1–10s tùy tác vụ; đã rút ngắn để cải thiện UX.
+- Tỉ lệ gửi thành công: phụ thuộc trạng thái đăng nhập và UI Zalo; logs ghi nhận để theo dõi thực tế.
+- Xử lý ảnh: xóa ảnh cũ trước khi chụp mới; hiển thị ảnh hiện hành qua /public.
+ 
+5.5 Sự kiện SSE cho quét live (mô tả)
+- status: { msg } — cập nhật trạng thái đang thực hiện (khởi tạo, mở trang, chụp…).
+- screenshot: { ts } — thông báo đã chụp; client tự refresh ảnh zalo_login.png với tham số ts.
+- end: { msg } — kết thúc phiên quét; client dừng SSE.
+- error: { msg } — báo lỗi; hiển thị trong nhật ký; kết thúc phiên.
+ 
+5.6 Ràng buộc dữ liệu và chỉ mục
+- students_username_uq: unique index trên students.username.
+- weekly_stats_class_week_uq: unique index trên (class_id, week_start).
+- Liên kết khóa ngoại: assignments(exercise_id,class_id), submissions(student_id,exercise_id), messages(student_id,class_id), zalo_logs(student_id).
+- Invariants: submissions.is_correct chỉ ý nghĩa với bài AI; streak/stars cập nhật theo nudge/sticker/điểm thưởng.
+ 
+5.7 Tham chiếu mã nguồn mở rộng
+- toInt: tiện ích chuyển chuỗi → số an toàn; nếu không hợp lệ trả null.
+- checkZaloLoginStatus: kiểm tra headless; chụp ảnh khi chưa đăng nhập.
+- notifyZaloAssignment: tạo nội dung thông báo; lấy hạn; gửi tới từng học sinh theo phone; ghi zalo_logs.
+- generateAIQuestionGemini: gọi Gemini, truyền ảnh inlineData; parse JSON output; fallback khi lỗi.
+- selftest route: xác minh import Playwright, launch Chromium, navigate id.zalo.me, chụp ảnh selftest.

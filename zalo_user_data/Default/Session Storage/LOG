@@ -1,2 +1,3 @@
-2026/01/01-20:56:59.688 526c Creating DB D:\job\NudgeMath_AI\zalo_user_data\Default\Session Storage since it was missing.
-2026/01/01-20:56:59.696 526c Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\Session Storage/MANIFEST-000001
+2026/01/03-10:25:18.914 5974 Reusing MANIFEST D:\job\NudgeMath_AI\zalo_user_data\Default\Session Storage/MANIFEST-000001
+2026/01/03-10:25:18.914 5974 Recovering log #3
+2026/01/03-10:25:18.916 5974 Reusing old log D:\job\NudgeMath_AI\zalo_user_data\Default\Session Storage/000003.log 
